@@ -17,6 +17,9 @@
  *   - delete entry.
  */
 
+
+#include <linux/netdevice.h>
+
 enum madcap_obj_id {
 	MADCAP_OBJ_ID_UNDEFINED,
 	MADCAP_OBJ_ID_LLT_OFFSET,
@@ -48,13 +51,6 @@ struct madcap_obj_entry {
 
 
 struct madcap_ops {
-	struct net_device *physical_dev;
-	/* physical_dev is key for confainter_of in order to get ptr
-	 * of madcap_ops.  It is unsafe approach, but this avoids any
-	 * modifications to mainline kernel. struct madcap_ops should
-	 * be a member of struct net_device...
-	 */
-
 	netdev_tx_t	(*mco_start_xmit) (struct sk_buff *skb,
 					   struct net_device *dev);
 	int		(*mco_if_rx) (struct sk_buff *skb);	/* ??? */
@@ -78,6 +74,11 @@ struct madcap_ops {
 
 /* prototypes for madcap operations */
 
+struct madcap_ops * get_madcap_ops (struct net_device *dev);
+int madcap_regsiter_device (struct net_device *dev, struct madcap_ops *mc_ops);
+int madcap_unregister_device (struct net_device *dev);
+
+
 int madcap_allocate_tonic (struct net_device *dev, struct net_device *vdev);
 int madcap_release_tonic (struct net_device *dev, struct net_device *vdev);
 
@@ -89,54 +90,39 @@ int madcap_llt_entry_del (struct net_device *dev, struct madcap_obj *obj);
 
 
 
-/* XXX: functions should be defined in madcap.c, and many features
- * such as driver/device lock and resource allocation like switchdev
- * trans.ph_prepare phasing are needed. but not implemented.
+
+
+/* Generic Netlink, madcap family definition. */
+
+/*
+ * XXX: Allocate/release tonic device are called when overlay pseudo
+ * device is created/destroyed. It will be implmeneted as a
+ * modification for protocol drivers. Otherwise, notifier like
+ * switchdev is needed ?
  */
 
-int
-madcap_allocate_tonic (struct net_device *dev, struct net_device *vdev)
-{
-	struct madcap_ops *mc_ops;
+/* genl commands */
+enum {
+	MADCAP_CMD_LLT_OFFSET_CFG,
+	MADCAP_CMD_LLT_LENGTH_CFG,
+	MADCAP_CMD_LLT_ENTRY_ADD,
+	MADCAP_CMD_LLT_ENTRY_DEL,
+	MADCAP_CMD_LLT_ENTRY_GET,
 
-	mc_ops = container_of (dev, struct madcap_ops, physical_dev);
+	__MADCAP_CMD_MAX,
+};
+#define MADCAP_CMD_MAX	(__MADCAP_CMD_MAX - 1)
 
-	if (mc_ops->madcap_allocate_tonic)
-		return mc_ops->madcap_allocate_tonic (dev, vdev);
+/* genl attr types */
+enum {
+	MADCAP_ATTR_NONE,	/* none */
+	MADCAP_ATTR_OBJ_OFFSET,	/* struct madcap_obj_offset */
+	MADCAP_ATTR_OBJ_LENGTH,	/* struct madcap_obj_length */
+	MADCAP_ATTR_OBJ_ENTRY,	/* struct madcap_obj_entry */
 
-	return -EOPNOTSUPP;
-}
+	__MADCAP_ATTR_MAX,
+};
+#define MADCAP_ATTR_MAX	(__MADCAP_ATTR_MAX - 1)
 
-int
-madcap_release_tonic (struct net_device *dev, struct net_device *vdev)
-{
-	struct madcap_ops *mc_ops;
-
-	mc_ops = container_of (dev, struct madcap_ops, physical_dev);
-
-	if (mc_ops->madcap_release_tonic)
-		return mc_ops->madcap_release_tonic (dev, vdev);
-
-	return -EOPNOTSUPP;
-}
-
-
-
-/* XXX: */
-#define __MADCAP_OBJ_DEFUN(funcname)					\
-	int (funcname) (struct net_device *dev, struct madcap_obj *obj)	\
-	{								\
-		struct madcap_ops *mc_ops;				\
-		mc_ops = container_of (dev, struct madcap_ops, physical_dev); \
-		if (mc_ops->(funcname))					\
-			return mc_ops->(funcname) (dev, vdev);		\
-									\
-		return -EOPNOTSUPP;					\
-	}								\
-
-__MADCAP_OBJ_DEFUN(madcap_llt_offset_cfg);
-__MADCAP_OBJ_DEFUN(madcap_llt_length_cfg);
-__MADCAP_OBJ_DEFUN(madcap_llt_entry_add);
-__MADCAP_OBJ_DEFUN(madcap_llt_entry_del);
 
 #endif /* _MADCAP_H_ */
