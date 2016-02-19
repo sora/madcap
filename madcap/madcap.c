@@ -14,8 +14,8 @@
 #include "../include/madcap.h"	/* XXX */
 
 
-#define MADCAP_VERSION	"0.0.0"
 #define MADCAP_NAME	"madcap"
+#define MADCAP_VERSION	"0.0.0"
 
 #define MADCAP_GENL_NAME	MADCAP_NAME
 #define MADCAP_GENL_VERSION	0x00
@@ -25,9 +25,6 @@ MODULE_VERSION (MADCAP_VERSION);
 MODULE_LICENSE ("GPL");
 MODULE_AUTHOR ("upa@haeena.net");
 
-static unsigned int madcap_net_id;
-
-#define MADCAP_DEV_NUM	16
 
 
 /* XXX: Many features such as driver/device lock and resource
@@ -36,30 +33,32 @@ static unsigned int madcap_net_id;
  */
 
 int
-madcap_allocate_tonic (struct net_device *dev, struct net_device *vdev)
+madcap_acquire_dev (struct net_device *dev, struct net_device *vdev)
 {
 	struct madcap_ops *mc_ops;
 
 	mc_ops = get_madcap_ops (dev);
 
-	if (mc_ops->mco_allocate_tonic)
-		return mc_ops->mco_allocate_tonic (dev, vdev);
+	if (mc_ops->mco_acquire_dev)
+		return mc_ops->mco_acquire_dev (dev, vdev);
 
 	return -EOPNOTSUPP;
 }
+EXPORT_SYMBOL (madcap_acquire_dev);
 
 int
-madcap_release_tonic (struct net_device *dev, struct net_device *vdev)
+madcap_release_dev (struct net_device *dev, struct net_device *vdev)
 {
 	struct madcap_ops *mc_ops;
 
 	mc_ops = get_madcap_ops (dev);
 
-	if (mc_ops->mco_release_tonic)
-		return mc_ops->mco_release_tonic (dev, vdev);
+	if (mc_ops->mco_release_dev)
+		return mc_ops->mco_release_dev (dev, vdev);
 
 	return -EOPNOTSUPP;
 }
+EXPORT_SYMBOL (madcap_release_dev);
 
 /* XXX: */
 #define __MADCAP_OBJ_DEFUN(funcname)                                    \
@@ -73,12 +72,12 @@ madcap_release_tonic (struct net_device *dev, struct net_device *vdev)
 									\
 		return -EOPNOTSUPP;					\
 	}								\
+	EXPORT_SYMBOL (madcap_##funcname);				\
 
 __MADCAP_OBJ_DEFUN(llt_offset_cfg);
 __MADCAP_OBJ_DEFUN(llt_length_cfg);
 __MADCAP_OBJ_DEFUN(llt_entry_add);
 __MADCAP_OBJ_DEFUN(llt_entry_del);
-
 
 
 /* Generic Netlink MadCap family */
@@ -128,7 +127,7 @@ madcap_cmd_llt_offset_cfg (struct sk_buff *skb, struct genl_info *info)
 	nla_memcpy (&obj_ofs, info->attrs[MADCAP_ATTR_OBJ_OFFSET],
 		    sizeof (obj_ofs));
 
-	return madcap_llt_offset_cfg (dev, (struct madcap_obj *) &obj_ofs);
+	return madcap_llt_offset_cfg (dev, MADCAP_OBJ (obj_ofs));
 }
 
 static int
@@ -158,7 +157,7 @@ madcap_cmd_llt_length_cfg (struct sk_buff *skb, struct genl_info *info)
 	nla_memcpy (&obj_len, info->attrs[MADCAP_ATTR_OBJ_LENGTH],
 		    sizeof (obj_len));
 
-	return madcap_llt_length_cfg (dev, (struct madcap_obj *) &obj_len);
+	return madcap_llt_length_cfg (dev, MADCAP_OBJ (obj_len));
 }
 
 static int
@@ -188,7 +187,7 @@ madcap_cmd_llt_entry_add (struct sk_buff *skb, struct genl_info *info)
 	nla_memcpy (&obj_ent, info->attrs[MADCAP_ATTR_OBJ_ENTRY],
 		    sizeof (obj_ent));
 
-	return madcap_llt_entry_add (dev, (struct madcap_obj *) &obj_ent);
+	return madcap_llt_entry_add (dev, MADCAP_OBJ (obj_ent));
 }
 
 static int
@@ -218,7 +217,7 @@ madcap_cmd_llt_entry_del (struct sk_buff *skb, struct genl_info *info)
 	nla_memcpy (&obj_ent, info->attrs[MADCAP_ATTR_OBJ_ENTRY],
 		    sizeof (obj_ent));
 
-	return madcap_llt_entry_del (dev, (struct madcap_obj *) &obj_ent);
+	return madcap_llt_entry_del (dev, MADCAP_OBJ (obj_ent));
 }
 
 static int
@@ -323,6 +322,7 @@ get_madcap_ops (struct net_device *dev)
 
 	return NULL;
 }
+EXPORT_SYMBOL (get_madcap_ops);
 
 int
 madcap_register_device (struct net_device *dev, struct madcap_ops *mc_ops)
@@ -350,6 +350,7 @@ madcap_register_device (struct net_device *dev, struct madcap_ops *mc_ops)
 
 	return 0;
 }
+EXPORT_SYMBOL (madcap_register_device);
 
 int
 madcap_unregister_device (struct net_device *dev)
@@ -372,7 +373,7 @@ madcap_unregister_device (struct net_device *dev)
 
 	return 0;
 }
-
+EXPORT_SYMBOL (madcap_unregister_device);
 
 
 static int

@@ -40,7 +40,6 @@ struct madcap_obj_offset {
 struct madcap_obj_length {
 	struct madcap_obj obj;
 	u16	length;
-
 };
 
 struct madcap_obj_entry {
@@ -49,6 +48,15 @@ struct madcap_obj_entry {
 	__be32	dst;	/* dst ipv4 address (locator) */
 };
 
+#define MADCAP_OBJ(obj_)	&(obj_.obj)
+#define MADCAP_OBJ_OFFSET(obj)	\
+	container_of (obj, struct madcap_obj_offset, obj)
+#define MADCAP_OBJ_LENGTH(obj)	\
+	container_of (obj, struct madcap_obj_length, obj)
+#define MADCAP_OBJ_ENTRY(obj)	\
+	container_of (obj, struct madcap_obj_entry, obj)
+
+
 
 struct madcap_ops {
 	netdev_tx_t	(*mco_start_xmit) (struct sk_buff *skb,
@@ -56,10 +64,11 @@ struct madcap_ops {
 	int		(*mco_if_rx) (struct sk_buff *skb);	/* ??? */
 	
 
-	int		(*mco_allocate_tonic) (struct net_device *dev,
-					       struct net_device *vdev);
-	int		(*mco_release_tonic) (struct net_device *dev,
-					      struct net_device *vdev);
+	/* vdev (pseudo NIC) acquire/release dev (physical tunnel device) */
+	int		(*mco_acquire_dev) (struct net_device *dev,
+					     struct net_device *vdev);
+	int		(*mco_release_dev) (struct net_device *dev,
+					    struct net_device *vdev);
 
 	int		(*mco_llt_offset_cfg) (struct net_device *dev,
 					       struct madcap_obj *obj);
@@ -74,13 +83,8 @@ struct madcap_ops {
 
 /* prototypes for madcap operations */
 
-struct madcap_ops * get_madcap_ops (struct net_device *dev);
-int madcap_regsiter_device (struct net_device *dev, struct madcap_ops *mc_ops);
-int madcap_unregister_device (struct net_device *dev);
-
-
-int madcap_allocate_tonic (struct net_device *dev, struct net_device *vdev);
-int madcap_release_tonic (struct net_device *dev, struct net_device *vdev);
+int madcap_acquire_dev (struct net_device *dev, struct net_device *vdev);
+int madcap_release_dev (struct net_device *dev, struct net_device *vdev);
 
 int madcap_llt_offset_cfg (struct net_device *dev, struct madcap_obj *obj);
 int madcap_llt_length_cfg (struct net_device *dev, struct madcap_obj *obj);
@@ -89,6 +93,12 @@ int madcap_llt_entry_add (struct net_device *dev, struct madcap_obj *obj);
 int madcap_llt_entry_del (struct net_device *dev, struct madcap_obj *obj);
 
 
+/* dev<->madcap_ops mappings are maintained in a table in madcap.ko
+ * in order to eliminate any modifications to mainline kernel.
+ */
+struct madcap_ops * get_madcap_ops (struct net_device *dev);
+int madcap_regsiter_device (struct net_device *dev, struct madcap_ops *mc_ops);
+int madcap_unregister_device (struct net_device *dev);
 
 
 
