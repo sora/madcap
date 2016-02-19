@@ -6,6 +6,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/rwlock.h>
+#include <net/sock.h>
 #include <net/genetlink.h>
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
@@ -91,6 +92,7 @@ static struct genl_family madcap_nl_family = {
 
 static struct nla_policy madcap_nl_policy[MADCAP_ATTR_MAX + 1] = {
 	[MADCAP_ATTR_NONE]	 = { .type = NLA_UNSPEC, },
+	[MADCAP_ATTR_IFINDEX]	 = { .type = NLA_U32, },
 	[MADCAP_ATTR_OBJ_OFFSET] = { .type = NLA_BINARY,
 				     .len = sizeof (struct madcap_obj_offset)},
 	[MADCAP_ATTR_OBJ_LENGTH] = { .type = NLA_BINARY,
@@ -102,25 +104,121 @@ static struct nla_policy madcap_nl_policy[MADCAP_ATTR_MAX + 1] = {
 static int
 madcap_cmd_llt_offset_cfg (struct sk_buff *skb, struct genl_info *info)
 {
-	return 0;
+	u32 ifindex;
+	struct net_device *dev;
+	struct madcap_obj_offset obj_ofs;
+	struct net *net = sock_net (skb->sk);
+
+	if (!info->attrs[MADCAP_ATTR_IFINDEX]) {
+		pr_debug ("%s: none ifindex", __func__);
+		return -EINVAL;
+	}
+	ifindex = nla_get_u32 (info->attrs[MADCAP_ATTR_IFINDEX]);
+
+	dev = __dev_get_by_index (net, ifindex);
+	if (!dev) {
+		pr_debug ("%s: device not found for %u", __func__, ifindex);
+		return -ENODEV;
+	}
+
+	if (!info->attrs[MADCAP_ATTR_OBJ_OFFSET]) {
+		pr_debug ("%s: none offset object", __func__);
+		return -EINVAL;
+	}
+	nla_memcpy (&obj_ofs, info->attrs[MADCAP_ATTR_OBJ_OFFSET],
+		    sizeof (obj_ofs));
+
+	return madcap_llt_offset_cfg (dev, (struct madcap_obj *) &obj_ofs);
 }
 
 static int
 madcap_cmd_llt_length_cfg (struct sk_buff *skb, struct genl_info *info)
 {
-	return 0;
+	u32 ifindex;
+	struct net_device *dev;
+	struct madcap_obj_length obj_len;
+	struct net *net = sock_net (skb->sk);
+
+	if (!info->attrs[MADCAP_ATTR_IFINDEX]) {
+		pr_debug ("%s: none ifindex", __func__);
+		return -EINVAL;
+	}
+	ifindex = nla_get_u32 (info->attrs[MADCAP_ATTR_IFINDEX]);
+
+	dev = __dev_get_by_index (net, ifindex);
+	if (!dev) {
+		pr_debug ("%s: device not found for %u", __func__, ifindex);
+		return -ENODEV;
+	}
+
+	if (!info->attrs[MADCAP_ATTR_OBJ_LENGTH]) {
+		pr_debug ("%s: none length object", __func__);
+		return -EINVAL;
+	}
+	nla_memcpy (&obj_len, info->attrs[MADCAP_ATTR_OBJ_LENGTH],
+		    sizeof (obj_len));
+
+	return madcap_llt_length_cfg (dev, (struct madcap_obj *) &obj_len);
 }
 
 static int
 madcap_cmd_llt_entry_add (struct sk_buff *skb, struct genl_info *info)
 {
-	return 0;
+	u32 ifindex;
+	struct net_device *dev;
+	struct madcap_obj_entry obj_ent;
+	struct net *net = sock_net (skb->sk);
+
+	if (!info->attrs[MADCAP_ATTR_IFINDEX]) {
+		pr_debug ("%s: none ifindex", __func__);
+		return -EINVAL;
+	}
+	ifindex = nla_get_u32 (info->attrs[MADCAP_ATTR_IFINDEX]);
+
+	dev = __dev_get_by_index (net, ifindex);
+	if (!dev) {
+		pr_debug ("%s: device not found for %u", __func__, ifindex);
+		return -ENODEV;
+	}
+
+	if (!info->attrs[MADCAP_ATTR_OBJ_ENTRY]) {
+		pr_debug ("%s: none entry object", __func__);
+		return -EINVAL;
+	}
+	nla_memcpy (&obj_ent, info->attrs[MADCAP_ATTR_OBJ_ENTRY],
+		    sizeof (obj_ent));
+
+	return madcap_llt_entry_add (dev, (struct madcap_obj *) &obj_ent);
 }
 
 static int
 madcap_cmd_llt_entry_del (struct sk_buff *skb, struct genl_info *info)
 {
-	return 0;
+	u32 ifindex;
+	struct net_device *dev;
+	struct madcap_obj_entry obj_ent;
+	struct net *net = sock_net (skb->sk);
+
+	if (!info->attrs[MADCAP_ATTR_IFINDEX]) {
+		pr_debug ("%s: none ifindex", __func__);
+		return -EINVAL;
+	}
+	ifindex = nla_get_u32 (info->attrs[MADCAP_ATTR_IFINDEX]);
+
+	dev = __dev_get_by_index (net, ifindex);
+	if (!dev) {
+		pr_debug ("%s: device not found for %u", __func__, ifindex);
+		return -ENODEV;
+	}
+
+	if (!info->attrs[MADCAP_ATTR_OBJ_ENTRY]) {
+		pr_debug ("%s: none entry object", __func__);
+		return -EINVAL;
+	}
+	nla_memcpy (&obj_ent, info->attrs[MADCAP_ATTR_OBJ_ENTRY],
+		    sizeof (obj_ent));
+
+	return madcap_llt_entry_del (dev, (struct madcap_obj *) &obj_ent);
 }
 
 static int

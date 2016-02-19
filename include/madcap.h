@@ -45,7 +45,7 @@ struct madcap_obj_length {
 
 struct madcap_obj_entry {
 	struct madcap_obj obj;
-	u64	id;
+	u64	id;	/* identifier of dst */
 	__be32	dst;	/* dst ipv4 address (locator) */
 };
 
@@ -116,6 +116,7 @@ enum {
 /* genl attr types */
 enum {
 	MADCAP_ATTR_NONE,	/* none */
+	MADCAP_ATTR_IFINDEX,	/* ifindex of tonic device */
 	MADCAP_ATTR_OBJ_OFFSET,	/* struct madcap_obj_offset */
 	MADCAP_ATTR_OBJ_LENGTH,	/* struct madcap_obj_length */
 	MADCAP_ATTR_OBJ_ENTRY,	/* struct madcap_obj_entry */
