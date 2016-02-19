@@ -1,4 +1,4 @@
-KERNELSRCDIR = /lib/modules/$(shell uname -r)/build
+KERNELSRCDIR := /lib/modules/$(shell uname -r)/build
 BUILD_DIR := $(shell pwd)
 VERBOSE = 0
 
@@ -11,15 +11,10 @@ obj-m := madcap.o
 
 
 all:
-	make -C $(KERNELSRCDIR) SUBDIRS=$(BUILD_DIR) KBUILD_VERBOSE=$(VERBOSE)  modules
+	make -C $(KERNELSRCDIR) M=$(BUILD_DIR) V=$(VERBOSE) modules
 
 .c.o:
 	$(CC) -c $< -o $@
 
 clean:
-	rm -f *.o
-	rm -f *.ko
-	rm -f *.mod.c
-	rm -f *~
-	rm modules.order
-	rm Module.symvers
+	make -C $(KERNELSRCDIR) M=$(BUILD_DIR) clean
