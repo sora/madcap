@@ -17,6 +17,10 @@
 #define DEBUG
 #endif
 
+/* common prefix used by pr_<> macros */
+#undef pr_fmt
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #define MADCAP_NAME	"madcap"
 #define MADCAP_VERSION	"0.0.0"
 
@@ -419,34 +423,35 @@ EXPORT_SYMBOL (madcap_unregister_device);
 
 
 static int
-__init madcap_init (void)
+__init madcap_init_module (void)
 {
 	int rc;
 
 	rc = register_pernet_subsys (&madcap_net_ops);
 	if (rc < 0)
-		return rc;
+		goto netns_failed;
 
 	rc = genl_register_family_with_ops (&madcap_nl_family, madcap_nl_ops);
 	if (rc < 0)
 		goto genl_failed;
 
-	pr_info ("madcap (%s) is loaded", MADCAP_VERSION);
+	pr_info ("madcap (%s) is loaded.", MADCAP_VERSION);
 	return 0;
 
 genl_failed:
 	unregister_pernet_subsys (&madcap_net_ops);
+netns_failed:
 	return rc;
 }
-module_init (madcap_init);
+module_init (madcap_init_module);
 
-static void
-__exit madcap_exit (void)
+static void __exit
+madcap_exit_module (void)
 {
 	genl_unregister_family (&madcap_nl_family);
 	unregister_pernet_subsys(&madcap_net_ops);
 
-	pr_info ("madcap (%s) is unloaded", MADCAP_VERSION);
+	pr_info ("madcap (%s) is unloaded.", MADCAP_VERSION);
 	return;
 }
-module_exit (madcap_exit);
+module_exit (madcap_exit_module);

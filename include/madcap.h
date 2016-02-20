@@ -21,10 +21,6 @@
 #include <linux/netdevice.h>
 #include <linux/netlink.h>
 
-/* common prefix used by pr_<> macros */
-#undef pr_fmt
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 enum madcap_obj_id {
 	MADCAP_OBJ_ID_UNDEFINED,
 	MADCAP_OBJ_ID_LLT_OFFSET,
