@@ -103,7 +103,7 @@ int madcap_llt_entry_dump (struct net_device *dev,
  * in order to eliminate any modifications to mainline kernel.
  */
 struct madcap_ops * get_madcap_ops (struct net_device *dev);
-int madcap_regsiter_device (struct net_device *dev, struct madcap_ops *mc_ops);
+int madcap_register_device (struct net_device *dev, struct madcap_ops *mc_ops);
 int madcap_unregister_device (struct net_device *dev);
 
 

@@ -6,11 +6,14 @@
 #include <linux/module.h>
 #include <linux/rculist.h>
 #include <linux/hash.h>
+#include <linux/rwlock.h>
 #include <linux/etherdevice.h>
 #include <net/net_namespace.h>
 #include <net/rtnetlink.h>
 #include <net/ip_tunnels.h>
 
+
+#include "../include/madcap.h"
 
 
 /* common prefix used by pr_<> macros */
@@ -28,11 +31,31 @@ MODULE_ALIAS_RTNL_LINK ("raven");
 static u32 raven_salt __read_mostly;
 
 
+struct raven_table {
+	struct hlist_node	hlist;	/* raven_dev->raven_table[] */
+	struct rcu_head		rcu;
+	struct net_device	*dev;
+	unsigned long		updated;	/* jiffies */
+
+	u64	id;	/* key */
+	__be32	dst;	/* ipv4 dst */
+};
 
 struct raven_dev {
 	struct list_head	list;
 	struct rcu_head		rcu;
 	struct net_device	*dev;
+
+	struct net_device	*vdev;	/* overlay virtual device acquiring 
+					 * this raven device */
+
+	u16	length;		/* madcap identifier length */
+	u16	offset;		/* madcap identifier offset */
+
+#define RAVEN_HASH_BITS	8
+#define RAVEN_HASH_SIZE	(1 << RAVEN_HASH_BITS)
+	struct hlist_head	raven_table[RAVEN_HASH_SIZE]; /* hash table */
+	rwlock_t		lock;	/* table lock */
 };
 
 struct raven_net {
@@ -41,6 +64,89 @@ struct raven_net {
 
 static int raven_net_id;
 
+
+static void
+raven_table_free (struct rcu_head *head)
+{
+	struct raven_table *rt = container_of (head, struct raven_table, rcu);
+	kfree(rt);
+}
+
+static void
+raven_table_delete (struct raven_table *rt)
+{
+	hlist_del_rcu (&rt->hlist);
+	call_rcu (&rt->rcu, raven_table_free);
+}
+
+static void
+raven_table_destroy (struct raven_dev *rdev)
+{
+	unsigned int n;
+
+	for (n = 0; n < RAVEN_HASH_SIZE; n++) {
+		struct hlist_node *ptr, *tmp;
+
+		hlist_for_each_safe (ptr, tmp, &rdev->raven_table[n]) {
+			struct raven_table *rt;
+
+			rt = container_of (ptr, struct raven_table, hlist);
+			raven_table_delete (rt);
+		}
+	}
+}
+
+static int
+raven_acquire_dev (struct net_device *dev, struct net_device *vdev)
+{
+	return 0;
+}
+
+static int
+raven_release_dev (struct net_device *dev, struct net_device *vdev)
+{
+	return 0;
+}
+
+static int
+raven_llt_offset_cfg (struct net_device *dev, struct madcap_obj *obj)
+{
+	return 0;
+}
+
+static int
+raven_llt_length_cfg (struct net_device *dev, struct madcap_obj *obj)
+{
+	return 0;
+}
+
+static int
+raven_llt_entry_add (struct net_device *dev, struct madcap_obj *obj)
+{
+	return 0;
+}
+
+static int
+raven_llt_entry_del (struct net_device *dev, struct madcap_obj *obj)
+{
+	return 0;
+}
+
+static int
+raven_llt_entry_dump (struct net_device *dev, struct netlink_callback *cb)
+{
+	return 0;
+}
+
+static struct madcap_ops raven_madcap_ops = {
+	.mco_acquire_dev	= raven_acquire_dev,
+	.mco_release_dev	= raven_release_dev,
+	.mco_llt_offset_cfg	= raven_llt_offset_cfg,
+	.mco_llt_length_cfg	= raven_llt_length_cfg,
+	.mco_llt_entry_add	= raven_llt_entry_add,
+	.mco_llt_entry_del	= raven_llt_entry_del,
+	.mco_llt_entry_dump	= raven_llt_entry_dump,
+};
 
 
 static netdev_tx_t
@@ -118,11 +224,18 @@ raven_newlink (struct net *net, struct net_device *dev,
 
 	err = register_netdevice (dev);
 	if (err) {
-		netdev_err (dev, "failed to register netdevice\n");
+		netdev_err (dev, "failed to register netdevice.\n");
 		return err;
 	}
 
 	list_add_tail_rcu (&rdev->list, &rnet->dev_list);
+
+	err = madcap_register_device (dev, &raven_madcap_ops);
+	if (err < 0) {
+		netdev_err (dev, "failed to register madcap_ops.\n");
+		return err;
+	}
+
 	return 0;
 }
 
@@ -131,6 +244,10 @@ raven_dellink (struct net_device *dev, struct list_head *head)
 {
 	struct raven_dev *rdev = netdev_priv (dev);
 
+	write_lock_bh (&rdev->lock);
+	raven_table_destroy (rdev);
+	write_unlock_bh (&rdev->lock);
+
 	list_del_rcu (&rdev->list);
 	unregister_netdevice_queue (dev, head);
 }
@@ -138,6 +255,7 @@ raven_dellink (struct net_device *dev, struct list_head *head)
 static void
 raven_setup (struct net_device *dev)
 {
+	int n;
 	struct raven_dev *rdev = netdev_priv (dev);
 
 	eth_hw_addr_random (dev);
@@ -155,7 +273,14 @@ raven_setup (struct net_device *dev)
 	netif_keep_dst (dev);
 
 	INIT_LIST_HEAD (&rdev->list);
+	rwlock_init (&rdev->lock);
 	rdev->dev = dev;
+	rdev->vdev = NULL;	/* alloced by mco_acquire_dev */
+	rdev->length = 0;	/* cfged by mco_llt_length_cfg */
+	rdev->offset = 0;	/* cfged by mco_llt_offset_cfg */
+
+	for (n = 0; n < RAVEN_HASH_SIZE; n++)
+		INIT_HLIST_HEAD (&rdev->raven_table[n]);
 }
 
 static struct rtnl_link_ops raven_link_ops __read_mostly = {
