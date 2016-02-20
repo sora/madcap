@@ -79,8 +79,10 @@ struct madcap_ops {
 					      struct madcap_obj *obj);
 	int		(*mco_llt_entry_del) (struct net_device *dev,
 					      struct madcap_obj *obj);
-	int		(*mco_llt_entry_dump) (struct net_device *dev,
-					       struct netlink_callback *cb);
+
+	struct madcap_obj_entry *
+	(*mco_llt_entry_dump) (struct net_device *dev,
+			       struct netlink_callback *cb);
 };
 
 
@@ -95,8 +97,9 @@ int madcap_llt_length_cfg (struct net_device *dev, struct madcap_obj *obj);
 int madcap_llt_entry_add (struct net_device *dev, struct madcap_obj *obj);
 int madcap_llt_entry_del (struct net_device *dev, struct madcap_obj *obj);
 
-int madcap_llt_entry_dump (struct net_device *dev,
-			   struct netlink_callback *cb);
+/* entry dump skb and cb is generic netlink. */
+struct madcap_obj_entry *  madcap_llt_entry_dump (struct net_device *dev,
+						  struct netlink_callback *cb);
 
 
 /* dev<->madcap_ops mappings are maintained in a table in madcap.ko

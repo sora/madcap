@@ -37,6 +37,8 @@ struct raven_table {
 	struct net_device	*dev;
 	unsigned long		updated;	/* jiffies */
 
+	struct madcap_obj_entry	obj_ent;
+
 	u64	id;	/* key */
 	__be32	dst;	/* ipv4 dst */
 };
@@ -64,6 +66,34 @@ struct raven_net {
 
 static int raven_net_id;
 
+
+static inline struct hlist_head *
+raven_table_head (struct raven_dev *rdev, u64 key)
+{
+	return &rdev->raven_table[hash_64 (key, RAVEN_HASH_BITS)];
+}
+
+struct raven_table *
+raven_table_add (struct raven_dev *rdev, u64 id, __be32 dst)
+{
+	struct raven_table *rt;
+
+	rt = (struct raven_table *) kmalloc (sizeof (*rt), GFP_KERNEL);
+
+	if (!rt)
+		return NULL;
+
+	memset (rt, 0, sizeof (*rt));
+
+	rt->id = id;
+	rt->dst = dst;
+	rt->dev = rdev->dev;
+	rt->updated = jiffies;
+
+	hlist_add_head_rcu (&rt->hlist, raven_table_head (rdev, id));
+
+	return rt;
+}
 
 static void
 raven_table_free (struct rcu_head *head)
@@ -96,46 +126,145 @@ raven_table_destroy (struct raven_dev *rdev)
 	}
 }
 
+static struct raven_table *
+raven_table_find (struct raven_dev *rdev, u64 id)
+{
+	struct hlist_head *head = raven_table_head (rdev, id);
+	struct raven_table *rt;
+
+	hlist_for_each_entry_rcu (rt, head, hlist) {
+		if (id == rt->id)
+			return rt;
+	}
+
+	return NULL;
+}
+
 static int
 raven_acquire_dev (struct net_device *dev, struct net_device *vdev)
 {
+	struct raven_dev *rdev = netdev_priv (dev);
+
+	if (rdev->vdev) {
+		pr_debug ("%s: %s is already acquired by %s", __func__,
+			  dev->name, rdev->vdev->name);
+		return -EINVAL;
+	}
+
+	rdev->vdev = vdev;
+	/* XXX: start dev? cleanup dev? */
+
 	return 0;
 }
 
 static int
 raven_release_dev (struct net_device *dev, struct net_device *vdev)
 {
+	struct raven_dev *rdev = netdev_priv (dev);
+
+	if (rdev->vdev != vdev)
+		return -EINVAL;
+
+	rdev->vdev = NULL;
+	/* stop dev? */
+
 	return 0;
 }
 
 static int
 raven_llt_offset_cfg (struct net_device *dev, struct madcap_obj *obj)
 {
+	struct raven_dev *rdev = netdev_priv (dev);
+	struct madcap_obj_offset *obj_off = MADCAP_OBJ_OFFSET (obj);
+
+	if (rdev->offset != obj_off->offset) {
+		/* offset is changed. drop all table entry. */
+		write_lock_bh (&rdev->lock);
+		raven_table_destroy (rdev);
+		rdev->offset = obj_off->offset;
+		write_unlock_bh (&rdev->lock);
+	}
+
 	return 0;
 }
 
 static int
 raven_llt_length_cfg (struct net_device *dev, struct madcap_obj *obj)
 {
+	struct raven_dev *rdev = netdev_priv (dev);
+	struct madcap_obj_length *obj_len = MADCAP_OBJ_LENGTH (obj);
+
+	if (rdev->length != obj_len->length) {
+		/* length is changed. drop all table entry. */
+		write_lock_bh (&rdev->lock);
+		raven_table_destroy (rdev);
+		rdev->length = obj_len->length;
+		write_unlock_bh (&rdev->lock);
+	}
+
 	return 0;
 }
 
 static int
 raven_llt_entry_add (struct net_device *dev, struct madcap_obj *obj)
 {
-	return 0;
+	struct raven_dev *rdev = netdev_priv (dev);
+	struct madcap_obj_entry *obj_ent = MADCAP_OBJ_ENTRY (obj);
+	struct raven_table *rt;
+
+	rt = raven_table_add (rdev, obj_ent->id, obj_ent->dst);
+	if (rt)
+		return 0;
+
+	rt->obj_ent = *obj_ent;
+
+	return -ENOMEM;
 }
 
 static int
 raven_llt_entry_del (struct net_device *dev, struct madcap_obj *obj)
 {
+	struct raven_table *rt;
+	struct raven_dev *rdev = netdev_priv (dev);
+	struct madcap_obj_entry *obj_ent = MADCAP_OBJ_ENTRY (obj);
+
+	rt = raven_table_find (rdev, obj_ent->id);
+
+	if (!rt)
+		return -ENOENT;
+
+	raven_table_delete (rt);
+
 	return 0;
 }
 
-static int
+static struct madcap_obj_entry *
 raven_llt_entry_dump (struct net_device *dev, struct netlink_callback *cb)
 {
-	return 0;
+	int idx, cnt;
+	unsigned int n;
+	struct raven_dev *rdev = netdev_priv (dev);
+	struct raven_table *rt;
+	struct madcap_obj_entry *obj_ent;
+
+	idx = cb->args[0];
+	obj_ent = NULL;
+
+	for (n = 0, cnt = 0; n < RAVEN_HASH_SIZE; n++) {
+		hlist_for_each_entry_rcu (rt, &rdev->raven_table[n], hlist) {
+			if (idx > cnt) {
+				cnt++;
+				continue;
+			}
+
+			obj_ent = &rt->obj_ent;
+			goto out;
+		}
+	}
+
+out:
+	cb->args[0] = cnt + 1;
+	return obj_ent;
 }
 
 static struct madcap_ops raven_madcap_ops = {

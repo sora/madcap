@@ -86,7 +86,7 @@ __MADCAP_OBJ_DEFUN(llt_length_cfg);
 __MADCAP_OBJ_DEFUN(llt_entry_add);
 __MADCAP_OBJ_DEFUN(llt_entry_del);
 
-int
+struct madcap_obj_entry *
 madcap_llt_entry_dump (struct net_device *dev, struct netlink_callback *cb)
 {
 	struct madcap_ops *mc_ops;
@@ -96,7 +96,7 @@ madcap_llt_entry_dump (struct net_device *dev, struct netlink_callback *cb)
 	if (mc_ops && mc_ops->mco_llt_entry_dump)
 		return mc_ops->mco_llt_entry_dump (dev, cb);
 
-	return -EOPNOTSUPP;
+	return NULL;
 }
 
 
@@ -249,6 +249,30 @@ madcap_nl_cmd_llt_entry_get (struct sk_buff *skb, struct genl_info *info)
 }
 
 static int
+genl_madcap_obj_entry_send (struct sk_buff *skb, u32 portid, u32 seq,
+			    int flags, struct madcap_obj_entry *obj_ent)
+{
+	void *hdr;
+
+	hdr = genlmsg_put (skb, portid, seq, &madcap_nl_family, flags,
+			   MADCAP_CMD_LLT_ENTRY_GET);
+
+	if (!hdr)
+		return -EMSGSIZE;
+
+	if (nla_put (skb, MADCAP_ATTR_OBJ_ENTRY, sizeof (*obj_ent), obj_ent))
+		goto nla_put_failure;
+
+	genlmsg_end (skb, hdr);
+
+	return 0;
+
+nla_put_failure:
+	genlmsg_cancel (skb, hdr);
+	return -1;
+}
+
+static int
 madcap_nl_cmd_llt_entry_dump (struct sk_buff *skb, struct netlink_callback *cb)
 {
 	int rc;
@@ -256,6 +280,7 @@ madcap_nl_cmd_llt_entry_dump (struct sk_buff *skb, struct netlink_callback *cb)
 	struct nlattr *attrs[MADCAP_ATTR_MAX + 1];
 	struct net_device *dev;
 	struct net *net = sock_net (skb->sk);
+	struct madcap_obj_entry *obj_ent;
 
 	/* XXX: kernel 4.0 later, use genlmsg_parse() */
 	rc = nlmsg_parse (cb->nlh, madcap_nl_family.hdrsize + GENL_HDRLEN,
@@ -275,7 +300,19 @@ madcap_nl_cmd_llt_entry_dump (struct sk_buff *skb, struct netlink_callback *cb)
 	ifindex = nla_get_u32 (attrs[MADCAP_ATTR_IFINDEX]);
 	dev = __dev_get_by_index (net, ifindex);
 
-	return madcap_llt_entry_dump (dev, cb);
+
+	obj_ent = madcap_llt_entry_dump (dev, cb);
+
+	if (obj_ent) {
+		rc = genl_madcap_obj_entry_send (skb,
+						 NETLINK_CB (cb->skb).portid,
+						 cb->nlh->nlmsg_seq,
+						 NLM_F_MULTI, obj_ent);
+		if (rc < 0)
+			return -1;
+	}
+
+	return skb->len;
 }
 
 static struct genl_ops madcap_nl_ops[] = {
