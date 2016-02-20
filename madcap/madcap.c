@@ -13,6 +13,9 @@
 
 #include "../include/madcap.h"	/* XXX */
 
+#ifndef DEBUG
+#define DEBUG
+#endif
 
 #define MADCAP_NAME	"madcap"
 #define MADCAP_VERSION	"0.0.0"
@@ -39,7 +42,7 @@ madcap_acquire_dev (struct net_device *dev, struct net_device *vdev)
 
 	mc_ops = get_madcap_ops (dev);
 
-	if (mc_ops->mco_acquire_dev)
+	if (mc_ops && mc_ops->mco_acquire_dev)
 		return mc_ops->mco_acquire_dev (dev, vdev);
 
 	return -EOPNOTSUPP;
@@ -53,7 +56,7 @@ madcap_release_dev (struct net_device *dev, struct net_device *vdev)
 
 	mc_ops = get_madcap_ops (dev);
 
-	if (mc_ops->mco_release_dev)
+	if (mc_ops && mc_ops->mco_release_dev)
 		return mc_ops->mco_release_dev (dev, vdev);
 
 	return -EOPNOTSUPP;
@@ -67,7 +70,7 @@ EXPORT_SYMBOL (madcap_release_dev);
 	{                                                               \
 		struct madcap_ops *mc_ops;                              \
 		mc_ops = get_madcap_ops (dev);				\
-		if (mc_ops->mco_##funcname)				\
+		if (mc_ops && mc_ops->mco_##funcname)			\
 			return mc_ops->mco_##funcname (dev, obj);	\
 									\
 		return -EOPNOTSUPP;					\
@@ -78,6 +81,20 @@ __MADCAP_OBJ_DEFUN(llt_offset_cfg);
 __MADCAP_OBJ_DEFUN(llt_length_cfg);
 __MADCAP_OBJ_DEFUN(llt_entry_add);
 __MADCAP_OBJ_DEFUN(llt_entry_del);
+
+int
+madcap_llt_entry_dump (struct net_device *dev, struct netlink_callback *cb)
+{
+	struct madcap_ops *mc_ops;
+
+	mc_ops = get_madcap_ops (dev);
+
+	if (mc_ops && mc_ops->mco_llt_entry_dump)
+		return mc_ops->mco_llt_entry_dump (dev, cb);
+
+	return -EOPNOTSUPP;
+}
+
 
 
 /* Generic Netlink MadCap family */
@@ -101,7 +118,7 @@ static struct nla_policy madcap_nl_policy[MADCAP_ATTR_MAX + 1] = {
 };
 
 static int
-madcap_cmd_llt_offset_cfg (struct sk_buff *skb, struct genl_info *info)
+madcap_nl_cmd_llt_offset_cfg (struct sk_buff *skb, struct genl_info *info)
 {
 	u32 ifindex;
 	struct net_device *dev;
@@ -109,7 +126,7 @@ madcap_cmd_llt_offset_cfg (struct sk_buff *skb, struct genl_info *info)
 	struct net *net = sock_net (skb->sk);
 
 	if (!info->attrs[MADCAP_ATTR_IFINDEX]) {
-		pr_debug ("%s: none ifindex", __func__);
+		pr_debug ("%s: no ifindex", __func__);
 		return -EINVAL;
 	}
 	ifindex = nla_get_u32 (info->attrs[MADCAP_ATTR_IFINDEX]);
@@ -121,7 +138,7 @@ madcap_cmd_llt_offset_cfg (struct sk_buff *skb, struct genl_info *info)
 	}
 
 	if (!info->attrs[MADCAP_ATTR_OBJ_OFFSET]) {
-		pr_debug ("%s: none offset object", __func__);
+		pr_debug ("%s: no offset object", __func__);
 		return -EINVAL;
 	}
 	nla_memcpy (&obj_ofs, info->attrs[MADCAP_ATTR_OBJ_OFFSET],
@@ -131,7 +148,7 @@ madcap_cmd_llt_offset_cfg (struct sk_buff *skb, struct genl_info *info)
 }
 
 static int
-madcap_cmd_llt_length_cfg (struct sk_buff *skb, struct genl_info *info)
+madcap_nl_cmd_llt_length_cfg (struct sk_buff *skb, struct genl_info *info)
 {
 	u32 ifindex;
 	struct net_device *dev;
@@ -139,7 +156,7 @@ madcap_cmd_llt_length_cfg (struct sk_buff *skb, struct genl_info *info)
 	struct net *net = sock_net (skb->sk);
 
 	if (!info->attrs[MADCAP_ATTR_IFINDEX]) {
-		pr_debug ("%s: none ifindex", __func__);
+		pr_debug ("%s: no ifindex", __func__);
 		return -EINVAL;
 	}
 	ifindex = nla_get_u32 (info->attrs[MADCAP_ATTR_IFINDEX]);
@@ -151,7 +168,7 @@ madcap_cmd_llt_length_cfg (struct sk_buff *skb, struct genl_info *info)
 	}
 
 	if (!info->attrs[MADCAP_ATTR_OBJ_LENGTH]) {
-		pr_debug ("%s: none length object", __func__);
+		pr_debug ("%s: no length object", __func__);
 		return -EINVAL;
 	}
 	nla_memcpy (&obj_len, info->attrs[MADCAP_ATTR_OBJ_LENGTH],
@@ -161,7 +178,7 @@ madcap_cmd_llt_length_cfg (struct sk_buff *skb, struct genl_info *info)
 }
 
 static int
-madcap_cmd_llt_entry_add (struct sk_buff *skb, struct genl_info *info)
+madcap_nl_cmd_llt_entry_add (struct sk_buff *skb, struct genl_info *info)
 {
 	u32 ifindex;
 	struct net_device *dev;
@@ -169,7 +186,7 @@ madcap_cmd_llt_entry_add (struct sk_buff *skb, struct genl_info *info)
 	struct net *net = sock_net (skb->sk);
 
 	if (!info->attrs[MADCAP_ATTR_IFINDEX]) {
-		pr_debug ("%s: none ifindex", __func__);
+		pr_debug ("%s: no ifindex", __func__);
 		return -EINVAL;
 	}
 	ifindex = nla_get_u32 (info->attrs[MADCAP_ATTR_IFINDEX]);
@@ -181,7 +198,7 @@ madcap_cmd_llt_entry_add (struct sk_buff *skb, struct genl_info *info)
 	}
 
 	if (!info->attrs[MADCAP_ATTR_OBJ_ENTRY]) {
-		pr_debug ("%s: none entry object", __func__);
+		pr_debug ("%s: no entry object", __func__);
 		return -EINVAL;
 	}
 	nla_memcpy (&obj_ent, info->attrs[MADCAP_ATTR_OBJ_ENTRY],
@@ -191,7 +208,7 @@ madcap_cmd_llt_entry_add (struct sk_buff *skb, struct genl_info *info)
 }
 
 static int
-madcap_cmd_llt_entry_del (struct sk_buff *skb, struct genl_info *info)
+madcap_nl_cmd_llt_entry_del (struct sk_buff *skb, struct genl_info *info)
 {
 	u32 ifindex;
 	struct net_device *dev;
@@ -199,7 +216,7 @@ madcap_cmd_llt_entry_del (struct sk_buff *skb, struct genl_info *info)
 	struct net *net = sock_net (skb->sk);
 
 	if (!info->attrs[MADCAP_ATTR_IFINDEX]) {
-		pr_debug ("%s: none ifindex", __func__);
+		pr_debug ("%s: no ifindex", __func__);
 		return -EINVAL;
 	}
 	ifindex = nla_get_u32 (info->attrs[MADCAP_ATTR_IFINDEX]);
@@ -211,7 +228,7 @@ madcap_cmd_llt_entry_del (struct sk_buff *skb, struct genl_info *info)
 	}
 
 	if (!info->attrs[MADCAP_ATTR_OBJ_ENTRY]) {
-		pr_debug ("%s: none entry object", __func__);
+		pr_debug ("%s: no entry object", __func__);
 		return -EINVAL;
 	}
 	nla_memcpy (&obj_ent, info->attrs[MADCAP_ATTR_OBJ_ENTRY],
@@ -221,42 +238,67 @@ madcap_cmd_llt_entry_del (struct sk_buff *skb, struct genl_info *info)
 }
 
 static int
-madcap_cmd_llt_entry_get (struct sk_buff *skb, struct genl_info *info)
+madcap_nl_cmd_llt_entry_get (struct sk_buff *skb, struct genl_info *info)
 {
+	/* ... */
 	return 0;
 }
 
 static int
-madcap_cmd_llt_entry_dump (struct sk_buff *skb, struct netlink_callback *cb)
+madcap_nl_cmd_llt_entry_dump (struct sk_buff *skb, struct netlink_callback *cb)
 {
-	return 0;
+	int rc;
+	u32 ifindex;
+	struct nlattr *attrs[MADCAP_ATTR_MAX + 1];
+	struct net_device *dev;
+	struct net *net = sock_net (skb->sk);
+
+	/* XXX: kernel 4.0 later, use genlmsg_parse() */
+	rc = nlmsg_parse (cb->nlh, madcap_nl_family.hdrsize + GENL_HDRLEN,
+			  attrs, MADCAP_ATTR_MAX, madcap_nl_policy);
+
+
+	if (rc < 0) {
+		pr_debug ("%s: failed to parse cb->nlh.", __func__);
+		return 0;
+	}
+
+	if (!attrs[MADCAP_ATTR_IFINDEX]) {
+		pr_debug ("%s: device is not specified", __func__);
+		return -EINVAL;
+	}
+
+	ifindex = nla_get_u32 (attrs[MADCAP_ATTR_IFINDEX]);
+	dev = __dev_get_by_index (net, ifindex);
+
+	return madcap_llt_entry_dump (dev, cb);
 }
 
 static struct genl_ops madcap_nl_ops[] = {
 	{
 		.cmd	= MADCAP_CMD_LLT_OFFSET_CFG,
-		.doit	= madcap_cmd_llt_offset_cfg,
+		.doit	= madcap_nl_cmd_llt_offset_cfg,
 		.policy	= madcap_nl_policy,
 	},
 	{
 		.cmd	= MADCAP_CMD_LLT_LENGTH_CFG,
-		.doit	= madcap_cmd_llt_length_cfg,
+		.doit	= madcap_nl_cmd_llt_length_cfg,
 		.policy	= madcap_nl_policy,
 	},
 	{
 		.cmd	= MADCAP_CMD_LLT_ENTRY_ADD,
-		.doit	= madcap_cmd_llt_entry_add,
+		.doit	= madcap_nl_cmd_llt_entry_add,
 		.policy	= madcap_nl_policy,
 	},
 	{
 		.cmd	= MADCAP_CMD_LLT_ENTRY_DEL,
-		.doit	= madcap_cmd_llt_entry_del,
+		.doit	= madcap_nl_cmd_llt_entry_del,
 		.policy	= madcap_nl_policy,
 	},
 	{
 		.cmd	= MADCAP_CMD_LLT_ENTRY_GET,
-		.doit	= madcap_cmd_llt_entry_get,
-		.dumpit	= madcap_cmd_llt_entry_dump,
+		.doit	= madcap_nl_cmd_llt_entry_get,
+		.dumpit	= madcap_nl_cmd_llt_entry_dump,
 		.policy	= madcap_nl_policy,
 	},
 };

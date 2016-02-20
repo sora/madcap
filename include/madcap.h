@@ -7,10 +7,10 @@
 /*
  * Encapsulation Madness!!
  * 
- * - TX protocol specified encaped packet.
- * - RX encaped packet to protocol driver pseudo interface.
- * - allocate ToNIC device (with specified queue?)
- * - release ToNIC device (with specified queue?)
+ * - Transmit protocol specific encaped packet.
+ * - Receive encaped packet to protocol driver pseudo interface.
+ * - Acquire Tunnel Overlay device (with specified queue?)
+ * - Release Tunnel Overlay device (with specified queue?)
  * - Config locator look-up table :
  *   - set offset/length.
  *   - add entry.
@@ -19,6 +19,7 @@
 
 
 #include <linux/netdevice.h>
+#include <linux/netlink.h>
 
 /* common prefix used by pr_<> macros */
 #undef pr_fmt
@@ -68,7 +69,7 @@ struct madcap_ops {
 	int		(*mco_if_rx) (struct sk_buff *skb);	/* ??? */
 	
 
-	/* vdev (pseudo NIC) acquire/release dev (physical tunnel device) */
+	/* vdev (pseudo NIC) acquires/releases dev (physical tunnel device) */
 	int		(*mco_acquire_dev) (struct net_device *dev,
 					     struct net_device *vdev);
 	int		(*mco_release_dev) (struct net_device *dev,
@@ -82,6 +83,8 @@ struct madcap_ops {
 					      struct madcap_obj *obj);
 	int		(*mco_llt_entry_del) (struct net_device *dev,
 					      struct madcap_obj *obj);
+	int		(*mco_llt_entry_dump) (struct net_device *dev,
+					       struct netlink_callback *cb);
 };
 
 
@@ -96,6 +99,9 @@ int madcap_llt_length_cfg (struct net_device *dev, struct madcap_obj *obj);
 int madcap_llt_entry_add (struct net_device *dev, struct madcap_obj *obj);
 int madcap_llt_entry_del (struct net_device *dev, struct madcap_obj *obj);
 
+int madcap_llt_entry_dump (struct net_device *dev,
+			   struct netlink_callback *cb);
+
 
 /* dev<->madcap_ops mappings are maintained in a table in madcap.ko
  * in order to eliminate any modifications to mainline kernel.
@@ -109,7 +115,7 @@ int madcap_unregister_device (struct net_device *dev);
 /* Generic Netlink, madcap family definition. */
 
 /*
- * XXX: Allocate/release tonic device are called when overlay pseudo
+ * XXX: Acquire/release tonic device are called when overlay pseudo
  * device is created/destroyed. It will be implmeneted as a
  * modification for protocol drivers. Otherwise, notifier like
  * switchdev is needed ?
