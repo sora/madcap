@@ -122,40 +122,12 @@ static struct nla_policy madcap_nl_policy[MADCAP_ATTR_MAX + 1] = {
 };
 
 static int
-madcap_nl_cmd_llt_offset_cfg (struct sk_buff *skb, struct genl_info *info)
+madcap_nl_cmd_llt_config (struct sk_buff *skb, struct genl_info *info)
 {
+	int ret;
 	u32 ifindex;
 	struct net_device *dev;
 	struct madcap_obj_offset obj_ofs;
-	struct net *net = sock_net (skb->sk);
-
-	if (!info->attrs[MADCAP_ATTR_IFINDEX]) {
-		pr_debug ("%s: no ifindex", __func__);
-		return -EINVAL;
-	}
-	ifindex = nla_get_u32 (info->attrs[MADCAP_ATTR_IFINDEX]);
-
-	dev = __dev_get_by_index (net, ifindex);
-	if (!dev) {
-		pr_debug ("%s: device not found for %u", __func__, ifindex);
-		return -ENODEV;
-	}
-
-	if (!info->attrs[MADCAP_ATTR_OBJ_OFFSET]) {
-		pr_debug ("%s: no offset object", __func__);
-		return -EINVAL;
-	}
-	nla_memcpy (&obj_ofs, info->attrs[MADCAP_ATTR_OBJ_OFFSET],
-		    sizeof (obj_ofs));
-
-	return madcap_llt_offset_cfg (dev, MADCAP_OBJ (obj_ofs));
-}
-
-static int
-madcap_nl_cmd_llt_length_cfg (struct sk_buff *skb, struct genl_info *info)
-{
-	u32 ifindex;
-	struct net_device *dev;
 	struct madcap_obj_length obj_len;
 	struct net *net = sock_net (skb->sk);
 
@@ -171,6 +143,21 @@ madcap_nl_cmd_llt_length_cfg (struct sk_buff *skb, struct genl_info *info)
 		return -ENODEV;
 	}
 
+	/* config offset */
+	if (!info->attrs[MADCAP_ATTR_OBJ_OFFSET]) {
+		pr_debug ("%s: no offset object", __func__);
+		return -EINVAL;
+	}
+	nla_memcpy (&obj_ofs, info->attrs[MADCAP_ATTR_OBJ_OFFSET],
+		    sizeof (obj_ofs));
+
+	ret = madcap_llt_offset_cfg (dev, MADCAP_OBJ (obj_ofs));
+	if (ret < 0) {
+		pr_info ("faield to config offset");
+		return ret;
+	}
+
+	/* config length */
 	if (!info->attrs[MADCAP_ATTR_OBJ_LENGTH]) {
 		pr_debug ("%s: no length object", __func__);
 		return -EINVAL;
@@ -178,7 +165,14 @@ madcap_nl_cmd_llt_length_cfg (struct sk_buff *skb, struct genl_info *info)
 	nla_memcpy (&obj_len, info->attrs[MADCAP_ATTR_OBJ_LENGTH],
 		    sizeof (obj_len));
 
-	return madcap_llt_length_cfg (dev, MADCAP_OBJ (obj_len));
+	ret = madcap_llt_length_cfg (dev, MADCAP_OBJ (obj_len));
+
+	if (ret < 0) {
+		pr_info ("failed to config length");
+		return ret;
+	}
+
+	return ret;
 }
 
 static int
@@ -317,13 +311,8 @@ madcap_nl_cmd_llt_entry_dump (struct sk_buff *skb, struct netlink_callback *cb)
 
 static struct genl_ops madcap_nl_ops[] = {
 	{
-		.cmd	= MADCAP_CMD_LLT_OFFSET_CFG,
-		.doit	= madcap_nl_cmd_llt_offset_cfg,
-		.policy	= madcap_nl_policy,
-	},
-	{
-		.cmd	= MADCAP_CMD_LLT_LENGTH_CFG,
-		.doit	= madcap_nl_cmd_llt_length_cfg,
+		.cmd	= MADCAP_CMD_LLT_CONFIG,
+		.doit	= madcap_nl_cmd_llt_config,
 		.policy	= madcap_nl_policy,
 	},
 	{

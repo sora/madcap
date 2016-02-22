@@ -122,8 +122,7 @@ int madcap_unregister_device (struct net_device *dev);
 
 /* genl commands */
 enum {
-	MADCAP_CMD_LLT_OFFSET_CFG,
-	MADCAP_CMD_LLT_LENGTH_CFG,
+	MADCAP_CMD_LLT_CONFIG,
 	MADCAP_CMD_LLT_ENTRY_ADD,
 	MADCAP_CMD_LLT_ENTRY_DEL,
 	MADCAP_CMD_LLT_ENTRY_GET,
