@@ -17,10 +17,6 @@
  *   - delete entry.
  */
 
-
-#include <linux/netdevice.h>
-#include <linux/netlink.h>
-
 enum madcap_obj_id {
 	MADCAP_OBJ_ID_UNDEFINED,
 	MADCAP_OBJ_ID_LLT_OFFSET,
@@ -30,22 +26,22 @@ enum madcap_obj_id {
 
 struct madcap_obj {
 	enum madcap_obj_id id;
-	u16	tb_id;	/* table id (queue?) */
+	__u16	tb_id;	/* table id (queue?) */
 };
 
 struct madcap_obj_offset {
 	struct madcap_obj obj;
-	u16	offset;
+	__u16	offset;
 };
 
 struct madcap_obj_length {
 	struct madcap_obj obj;
-	u16	length;
+	__u16	length;
 };
 
 struct madcap_obj_entry {
 	struct madcap_obj obj;
-	u64	id;	/* identifier of dst */
+	__u64	id;	/* identifier of dst */
 	__be32	dst;	/* dst ipv4 address (locator) */
 };
 
@@ -58,6 +54,10 @@ struct madcap_obj_entry {
 	container_of (obj, struct madcap_obj_entry, obj)
 
 
+#ifdef __KERNEL__
+
+#include <linux/netdevice.h>
+#include <linux/netlink.h>
 
 struct madcap_ops {
 	netdev_tx_t	(*mco_start_xmit) (struct sk_buff *skb,
@@ -109,6 +109,9 @@ struct madcap_ops * get_madcap_ops (struct net_device *dev);
 int madcap_register_device (struct net_device *dev, struct madcap_ops *mc_ops);
 int madcap_unregister_device (struct net_device *dev);
 
+#endif /* __KERNEL__ */
+
+
 
 
 /* Generic Netlink, madcap family definition. */
@@ -119,6 +122,9 @@ int madcap_unregister_device (struct net_device *dev);
  * modification for protocol drivers. Otherwise, notifier like
  * switchdev is needed ?
  */
+
+#define MADCAP_GENL_NAME	"madcap"
+#define MADCAP_GENL_VERSION	0x00
 
 /* genl commands */
 enum {
