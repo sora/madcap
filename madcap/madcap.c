@@ -82,6 +82,8 @@ __MADCAP_OBJ_DEFUN(llt_offset_cfg);
 __MADCAP_OBJ_DEFUN(llt_length_cfg);
 __MADCAP_OBJ_DEFUN(llt_entry_add);
 __MADCAP_OBJ_DEFUN(llt_entry_del);
+__MADCAP_OBJ_DEFUN(udpencap_cfg);
+
 
 struct madcap_obj_entry *
 madcap_llt_entry_dump (struct net_device *dev, struct netlink_callback *cb)
@@ -108,14 +110,16 @@ static struct genl_family madcap_nl_family = {
 };
 
 static struct nla_policy madcap_nl_policy[MADCAP_ATTR_MAX + 1] = {
-	[MADCAP_ATTR_NONE]	 = { .type = NLA_UNSPEC, },
-	[MADCAP_ATTR_IFINDEX]	 = { .type = NLA_U32, },
-	[MADCAP_ATTR_OBJ_OFFSET] = { .type = NLA_BINARY,
-				     .len = sizeof (struct madcap_obj_offset)},
-	[MADCAP_ATTR_OBJ_LENGTH] = { .type = NLA_BINARY,
-				     .len = sizeof (struct madcap_obj_length)},
-	[MADCAP_ATTR_OBJ_ENTRY]  = { .type = NLA_BINARY,
-				     .len = sizeof (struct madcap_obj_entry)},
+	[MADCAP_ATTR_NONE]         = { .type = NLA_UNSPEC, },
+	[MADCAP_ATTR_IFINDEX]	   = { .type = NLA_U32, },
+	[MADCAP_ATTR_OBJ_OFFSET]   = { .type = NLA_BINARY,
+				   .len = sizeof (struct madcap_obj_offset)},
+	[MADCAP_ATTR_OBJ_LENGTH]   = { .type = NLA_BINARY,
+				   .len = sizeof (struct madcap_obj_length)},
+	[MADCAP_ATTR_OBJ_ENTRY]    = { .type = NLA_BINARY,
+				   .len = sizeof (struct madcap_obj_entry)},
+	[MADCAP_ATTR_OBJ_UDPENCAP] = { .type = NLA_BINARY,
+				   .len = sizeof (struct madcap_obj_udpencap)},
 };
 
 static int
@@ -306,6 +310,37 @@ madcap_nl_cmd_llt_entry_dump (struct sk_buff *skb, struct netlink_callback *cb)
 	return skb->len;
 }
 
+static int
+madcap_nl_cmd_udpencap_config (struct sk_buff * skb, struct genl_info *info)
+{
+	u32 ifindex;
+	struct net_device *dev;
+	struct madcap_obj_udpencap obj_udp;
+	struct net *net = sock_net (skb->sk);
+
+	if (!info->attrs[MADCAP_ATTR_IFINDEX]) {
+		pr_debug ("%s: no ifindex", __func__);
+		return -EINVAL;
+	}
+	ifindex = nla_get_u32 (info->attrs[MADCAP_ATTR_IFINDEX]);
+
+	dev = __dev_get_by_index (net, ifindex);
+	if (!dev) {
+		pr_debug ("%s: device not found for %u", __func__, ifindex);
+		return -ENODEV;
+	}
+
+	if (!info->attrs[MADCAP_ATTR_OBJ_UDPENCAP]) {
+		pr_debug ("%s: no udpencap object", __func__);
+		return -EINVAL;
+	}
+	nla_memcpy (&obj_udp, info->attrs[MADCAP_ATTR_OBJ_UDPENCAP],
+		    sizeof (obj_udp));
+
+
+	return madcap_udpencap_cfg (dev, MADCAP_OBJ (obj_udp));
+}
+
 static struct genl_ops madcap_nl_ops[] = {
 	{
 		.cmd	= MADCAP_CMD_LLT_CONFIG,
@@ -326,6 +361,11 @@ static struct genl_ops madcap_nl_ops[] = {
 		.cmd	= MADCAP_CMD_LLT_ENTRY_GET,
 		.doit	= madcap_nl_cmd_llt_entry_get,
 		.dumpit	= madcap_nl_cmd_llt_entry_dump,
+		.policy	= madcap_nl_policy,
+	},
+	{
+		.cmd	= MADCAP_CMD_UDPENCAP_CONFIG,
+		.doit	= madcap_nl_cmd_udpencap_config,
 		.policy	= madcap_nl_policy,
 	},
 };

@@ -61,6 +61,8 @@ struct raven_dev {
 #define RAVEN_HASH_SIZE	(1 << RAVEN_HASH_BITS)
 	struct hlist_head	raven_table[RAVEN_HASH_SIZE]; /* hash table */
 	rwlock_t		lock;	/* table lock */
+
+	struct madcap_obj_udpencap ou;	/* enable udp encap */
 };
 
 struct raven_net {
@@ -270,6 +272,18 @@ out:
 	return obj_ent;
 }
 
+static int
+raven_udpencap_cfg (struct net_device *dev, struct madcap_obj *obj)
+{
+	struct madcap_obj_udpencap *ou;
+	struct raven_dev *rdev = netdev_priv (dev);
+
+	ou = MADCAP_OBJ_UDPENCAP (obj);
+
+	rdev->ou = *ou;
+	return 0;
+}
+
 static struct madcap_ops raven_madcap_ops = {
 	.mco_acquire_dev	= raven_acquire_dev,
 	.mco_release_dev	= raven_release_dev,
@@ -278,6 +292,7 @@ static struct madcap_ops raven_madcap_ops = {
 	.mco_llt_entry_add	= raven_llt_entry_add,
 	.mco_llt_entry_del	= raven_llt_entry_del,
 	.mco_llt_entry_dump	= raven_llt_entry_dump,
+	.mco_udpencap_cfg	= raven_udpencap_cfg,
 };
 
 

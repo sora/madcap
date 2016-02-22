@@ -22,6 +22,7 @@ enum madcap_obj_id {
 	MADCAP_OBJ_ID_LLT_OFFSET,
 	MADCAP_OBJ_ID_LLT_LENGTH,
 	MADCAP_OBJ_ID_LLT_ENTRY,
+	MADCAP_OBJ_ID_UDPENCAP,
 };
 
 struct madcap_obj {
@@ -45,6 +46,14 @@ struct madcap_obj_entry {
 	__be32	dst;	/* dst ipv4 address (locator) */
 };
 
+struct madcap_obj_udpencap {
+	struct madcap_obj obj;
+	int	encap_enable;
+	int	src_hash_enable;
+	__u16	dst_port;
+	__u16	src_port;
+};
+
 #define MADCAP_OBJ(obj_)	&(obj_.obj)
 #define MADCAP_OBJ_OFFSET(obj)	\
 	container_of (obj, struct madcap_obj_offset, obj)
@@ -52,6 +61,8 @@ struct madcap_obj_entry {
 	container_of (obj, struct madcap_obj_length, obj)
 #define MADCAP_OBJ_ENTRY(obj)	\
 	container_of (obj, struct madcap_obj_entry, obj)
+#define MADCAP_OBJ_UDPENCAP(obj)	\
+	container_of (obj, struct madcap_obj_udpencap, obj)
 
 
 #ifdef __KERNEL__
@@ -75,10 +86,14 @@ struct madcap_ops {
 					       struct madcap_obj *obj);
 	int		(*mco_llt_length_cfg) (struct net_device *dev,
 					       struct madcap_obj *obj);
+
 	int		(*mco_llt_entry_add) (struct net_device *dev,
 					      struct madcap_obj *obj);
 	int		(*mco_llt_entry_del) (struct net_device *dev,
 					      struct madcap_obj *obj);
+
+	int		(*mco_udpencap_cfg) (struct net_device *dev,
+					     struct madcap_obj *obj);
 
 	struct madcap_obj_entry *
 	(*mco_llt_entry_dump) (struct net_device *dev,
@@ -96,6 +111,8 @@ int madcap_llt_length_cfg (struct net_device *dev, struct madcap_obj *obj);
 
 int madcap_llt_entry_add (struct net_device *dev, struct madcap_obj *obj);
 int madcap_llt_entry_del (struct net_device *dev, struct madcap_obj *obj);
+
+int madcap_udpencap_cfg (struct net_device *dev, struct madcap_obj *obj);
 
 /* entry dump skb and cb is generic netlink. */
 struct madcap_obj_entry *  madcap_llt_entry_dump (struct net_device *dev,
@@ -132,6 +149,7 @@ enum {
 	MADCAP_CMD_LLT_ENTRY_ADD,
 	MADCAP_CMD_LLT_ENTRY_DEL,
 	MADCAP_CMD_LLT_ENTRY_GET,
+	MADCAP_CMD_UDPENCAP_CONFIG,
 
 	__MADCAP_CMD_MAX,
 };
@@ -139,11 +157,12 @@ enum {
 
 /* genl attr types */
 enum {
-	MADCAP_ATTR_NONE,	/* none */
-	MADCAP_ATTR_IFINDEX,	/* ifindex of tonic device */
-	MADCAP_ATTR_OBJ_OFFSET,	/* struct madcap_obj_offset */
-	MADCAP_ATTR_OBJ_LENGTH,	/* struct madcap_obj_length */
-	MADCAP_ATTR_OBJ_ENTRY,	/* struct madcap_obj_entry */
+	MADCAP_ATTR_NONE,		/* none */
+	MADCAP_ATTR_IFINDEX,		/* ifindex of madcap device */
+	MADCAP_ATTR_OBJ_OFFSET,		/* struct madcap_obj_offset */
+	MADCAP_ATTR_OBJ_LENGTH,		/* struct madcap_obj_length */
+	MADCAP_ATTR_OBJ_ENTRY,		/* struct madcap_obj_entry */
+	MADCAP_ATTR_OBJ_UDPENCAP,	/* struct madcap_obj_udpencap */
 
 	__MADCAP_ATTR_MAX,
 };

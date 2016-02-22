@@ -30,6 +30,10 @@ struct madcap_param {
 	__u64 id;
 	__u32 dst;
 
+	int udp;
+	int enable, disable, src_port_hash;
+	__u16 dst_port, src_port;
+
 	int f_offset, f_length;	/* offset and length may become 0 correctly */
 };
 
@@ -40,8 +44,11 @@ usage (void)
 		 "usage:  ip madcap { add | del } "
 		 "[ id ID ] [ dst ADDR ] [ dev DEVICE ]\n"
 		 "\n"
-		 "        ip madcap set "
+		 "        ip madcap set [ dev DEVICE ] "
 		 "[ offset OFFSET ] [ length LENGTH ]\n"
+		 "                      [ udp [ [ dst-port [ PORT ] ]\n"
+		 "                              [ src-port [ PORT | hash ] ]\n"
+		 "                              [ enable | disable ] ]\n"
 		 "\n"
 		 "        ip madcap show [ dev DEVICE ]\n"
 		);
@@ -88,6 +95,28 @@ parse_args (int argc, char ** argv, struct madcap_param *p)
 			NEXT_ARG ();
 			if (inet_pton (AF_INET, *argv, &p->dst) < 1) {
 				invarg ("invalid dst address", *argv);
+				exit (-1);
+			}
+		} else if (strcmp (*argv, "udp") == 0)
+			p->udp = 1;
+		else if (strcmp (*argv, "enable") == 0)
+			p->enable = 1;
+		else if (strcmp (*argv, "disable") == 0)
+			p->disable = 1;
+		else if (strcmp (*argv, "src-port") == 0) {
+			NEXT_ARG ();
+			if (strcmp (*argv, "hash") == 0) {
+				p->src_port_hash = 1;
+			} else {
+				if (get_u16 (&p->src_port, *argv, 0)) {
+					invarg ("invalid src-port", *argv);
+					exit (-1);
+				}
+			}
+		} else if (strcmp (*argv, "dst-port") == 0) {
+			NEXT_ARG ();
+			if (get_u16 (&p->dst_port, *argv, 0)) {
+				invarg ("invalid dst-port", *argv);
 				exit (-1);
 			}
 		}
@@ -162,6 +191,48 @@ do_del (int argc, char **argv)
 }
 
 static int
+do_set_udp (struct madcap_param p)
+{
+	struct madcap_obj_udpencap ou;
+
+	memset (&ou, 0, sizeof (ou));
+	ou.obj.id = MADCAP_OBJ_ID_UDPENCAP;
+
+	if (p.enable)
+		ou.encap_enable = 1;
+
+	if (p.disable)
+		ou.encap_enable = 0;
+
+	if (p.src_port_hash)
+		ou.src_hash_enable = 1;
+
+	if (p.src_port)
+		ou.src_port = htons (p.src_port);
+
+	if (p.dst_port)
+		ou.dst_port = htons (p.dst_port);
+
+	GENL_REQUEST (req, 1024, genl_family, 0, MADCAP_GENL_VERSION,
+		      MADCAP_CMD_UDPENCAP_CONFIG, NLM_F_REQUEST | NLM_F_ACK);
+
+	if (p.ifindex == 0) {
+		fprintf (stderr, "device must be specified\n");
+		exit (-1);
+	} else {
+		addattr32 (&req.n, 1024, MADCAP_ATTR_IFINDEX, p.ifindex);
+	}
+
+	addattr_l (&req.n, 1024, MADCAP_ATTR_OBJ_UDPENCAP,
+		   &ou, sizeof (ou));
+
+	if (rtnl_talk (&genl_rth, &req.n, NULL, 0) < 0)
+		return -2;
+
+	return 0;
+}
+
+static int
 do_set (int argc, char **argv)
 {
 	struct madcap_param p;
@@ -170,8 +241,19 @@ do_set (int argc, char **argv)
 
 	parse_args (argc, argv, &p);
 
+	if (p.udp) {
+		return do_set_udp (p);
+	}
+
 	GENL_REQUEST (req, 1024, genl_family, 0, MADCAP_GENL_VERSION,
 		      MADCAP_CMD_LLT_CONFIG, NLM_F_REQUEST | NLM_F_ACK);
+
+	if (p.ifindex == 0) {
+		fprintf (stderr, "device must be specified\n");
+		exit (-1);
+	} else {
+		addattr32 (&req.n, 1024, MADCAP_ATTR_IFINDEX, p.ifindex);
+	}
 
 	if (p.f_offset) {
 		/* config offset */
