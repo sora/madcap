@@ -5,6 +5,7 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/vermagic.h>
 #include <linux/rwlock.h>
 #include <net/sock.h>
 #include <net/genetlink.h>

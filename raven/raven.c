@@ -15,10 +15,13 @@
 
 #include "../include/madcap.h"
 
+#ifndef DEBUG
+#define DEBUG
+#endif
 
 /* common prefix used by pr_<> macros */
 #undef pr_fmt
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt "\n"
 
 
 #define RAVEN_VERSION	"0.0.0"
@@ -213,12 +216,12 @@ raven_llt_entry_add (struct net_device *dev, struct madcap_obj *obj)
 	struct raven_table *rt;
 
 	rt = raven_table_add (rdev, obj_ent->id, obj_ent->dst);
-	if (rt)
-		return 0;
+	if (!rt)
+		return -ENOMEM;
 
 	rt->obj_ent = *obj_ent;
 
-	return -ENOMEM;
+	return 0;
 }
 
 static int

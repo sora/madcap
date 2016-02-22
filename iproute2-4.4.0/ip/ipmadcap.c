@@ -37,13 +37,13 @@ static void
 usage (void)
 {
 	fprintf (stderr,
-		 "usage:  ip mad { add | del } "
+		 "usage:  ip madcap { add | del } "
 		 "[ id ID ] [ dst ADDR ] [ dev DEVICE ]\n"
 		 "\n"
-		 "        ip mad set "
+		 "        ip madcap set "
 		 "[ offset OFFSET ] [ length LENGTH ]\n"
 		 "\n"
-		 "        ip mad show { config }\n"
+		 "        ip madcap show [ dev DEVICE ]\n"
 		);
 
 	exit (-1);
@@ -53,8 +53,6 @@ usage (void)
 static int
 parse_args (int argc, char ** argv, struct madcap_param *p)
 {
-	if (argc < 1)
-		usage ();
 
 	memset (p, 0, sizeof (*p));
 
@@ -227,7 +225,7 @@ obj_entry_nlmsg (const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	memcpy (&oe, RTA_DATA (attrs[MADCAP_ATTR_OBJ_ENTRY]), sizeof (oe));
 	inet_ntop (AF_INET, &oe.dst, dst, sizeof (dst));
 	
-	fprintf (stdout, "id %x dst %s dev %s\n", oe.id, dst, dev);
+	fprintf (stdout, "id %llu dst %s dev %s\n", oe.id, dst, dev);
 	return 0;
 }
 
@@ -245,7 +243,7 @@ do_show (int argc, char **argv)
 	parse_args (argc, argv, &p);
 	
 	if (p.ifindex == 0) {
-		fprintf (stderr, "devi must be specified\n");
+		fprintf (stderr, "device must be specified\n");
 		exit (-1);
 	}
 
@@ -271,7 +269,7 @@ do_show (int argc, char **argv)
 }
 
 int
-do_ipmad (int argc, char **argv)
+do_ipmadcap (int argc, char **argv)
 {
 	if (genl_family < 0) {
 		if (rtnl_open_byproto (&genl_rth, 0, NETLINK_GENERIC) < 0) {
@@ -299,7 +297,8 @@ do_ipmad (int argc, char **argv)
 	if (matches (*argv, "help") == 0)
 		usage ();
 		
-	fprintf (stderr, "Command \"%s\" is unknown, try \"ip mad help\".\n",
+	fprintf (stderr,
+		 "Command \"%s\" is unknown, try \"ip madcap help\".\n",
 		 *argv);
 
 	return -1;
