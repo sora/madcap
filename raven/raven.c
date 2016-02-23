@@ -23,6 +23,12 @@
 #undef pr_fmt
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt "\n"
 
+#ifndef DEBUG
+#undef pr_debug
+#define pr_debug(fmt, ...) \
+        printk(KERN_INFO "%s: " pr_fmt(fmt), __func__, ##__VA_ARGS__)
+#endif
+
 
 #define RAVEN_VERSION	"0.0.0"
 MODULE_VERSION (RAVEN_VERSION);
@@ -30,6 +36,10 @@ MODULE_LICENSE ("GPL");
 MODULE_AUTHOR ("upa@haeena.net");
 MODULE_DESCRIPTION ("raven, madcap capable dummy driver");
 MODULE_ALIAS_RTNL_LINK ("raven");
+
+static int drop_mode __read_mostly = 0;
+module_param_named (drop_mode, drop_mode, int, 0444);
+MODULE_PARM_DESC (drop_mode, "if 1, tx packet is dropped immediately.");
 
 static u32 raven_salt __read_mostly;
 
@@ -295,8 +305,6 @@ static struct madcap_ops raven_madcap_ops = {
 static netdev_tx_t
 raven_xmit (struct sk_buff *skb, struct net_device *dev)
 {
-	struct pcpu_sw_netstats *tx_stats;
-
 	/* As a dummy driver for measurement, raven device updates
 	 * counters and drops packet immediately.
 	 * 
@@ -307,6 +315,32 @@ raven_xmit (struct sk_buff *skb, struct net_device *dev)
 	 * - Should I implement this to existing drivers for normal NIC?
 	 */
 
+	int headroom, err;
+	struct pcpu_sw_netstats *tx_stats;
+	struct raven_dev *rdev = netdev_priv (dev);
+	struct raven_table *rt;
+
+	if (drop_mode)
+		goto out;
+
+	/* alloc headroom */
+	headroom = (rdev->ou.encap_enable) ? 14 + 20 + 8: 14 + 20;
+	err = skb_cow_head (skb, headroom);
+	if (unlikely (err)) {
+		kfree_skb (skb);
+		return -ENOMEM;
+	}
+
+	if (rdev->ou.encap_enable) {
+		/* build udp header */
+		struct udphdr *uh;
+		uh = (struct udphdr *) __skb_push (skb, sizeof (*uh));
+		uh->dest = rdev->ou.dst_port;
+		uh->source = rdev->ou.src_port;
+		uh->len = htons (skb->len);
+	}
+
+out:
 	tx_stats = this_cpu_ptr (dev->tstats);
 	u64_stats_update_begin (&tx_stats->syncp);
 	tx_stats->tx_packets++;

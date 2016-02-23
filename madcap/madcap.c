@@ -53,6 +53,21 @@ struct madcap_net {
  * not implemented...
  */
 
+netdev_tx_t
+madcap_queue_xmit (struct sk_buff *skb, struct net_device *dev)
+{
+	/* XXX: physical device is also shared resource for multiple
+	 * pseudo interfaces for overlays (e.g, multiple vxlan
+	 * interfaces for each VNI). So, some queueing and locking
+	 * between pseudo interfaces and a physical interface.
+	 * HOWEVER, this model shouled be more considered.
+	 */
+
+	skb->dev = dev;
+	return dev_queue_xmit (skb);
+}
+EXPORT_SYMBOL (madcap_queue_xmit);
+
 int
 madcap_acquire_dev (struct net_device *dev, struct net_device *vdev)
 {

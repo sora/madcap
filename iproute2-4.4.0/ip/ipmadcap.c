@@ -28,7 +28,7 @@ struct madcap_param {
 	__u16 offset;
 	__u16 length;
 	__u64 id;
-	__u32 dst;
+	__u32 dst, src;
 
 	int udp;
 	int enable, disable, src_port_hash;
@@ -44,10 +44,10 @@ usage (void)
 {
 	fprintf (stderr,
 		 "usage:  ip madcap { add | del } "
-		 "[ id ID ] [ dst ADDR ] [ dev DEVICE ]\n"
+		 "[ id ID ] [ dst IPADDR ] [ dev DEVICE ]\n"
 		 "\n"
 		 "        ip madcap set [ dev DEVICE ] "
-		 "[ offset OFFSET ] [ length LENGTH ]\n"
+		 "[ offset OFFSET ] [ length LENGTH ] [ src IPADDR ]\n"
 		 "                      [ udp [ [ dst-port [ PORT ] ]\n"
 		 "                              [ src-port [ PORT | hash ] ]\n"
 		 "                              [ enable | disable ] ]\n"
@@ -97,6 +97,12 @@ parse_args (int argc, char ** argv, struct madcap_param *p)
 			NEXT_ARG ();
 			if (inet_pton (AF_INET, *argv, &p->dst) < 1) {
 				invarg ("invalid dst address", *argv);
+				exit (-1);
+			}
+		} else if (strcmp (*argv, "src") == 0) {
+			NEXT_ARG ();
+			if (inet_pton (AF_INET, *argv, &p->src) < 1) {
+				invarg ("invalid src address", *argv);
 				exit (-1);
 			}
 		} else if (strcmp (*argv, "udp") == 0)
@@ -264,6 +270,7 @@ do_set (int argc, char **argv)
 		oc.obj.tb_id	= 0;	/* XXX */
 		oc.offset	= p.offset;
 		oc.length	= p.length;
+		oc.src		= p.src;
 		addattr_l (&req.n, 1024, MADCAP_ATTR_OBJ_CONFIG,
 			   &oc, sizeof (oc));
 	} else {
@@ -315,7 +322,7 @@ obj_config_nlmsg (const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 {
 	int len;
 	__u32 ifindex;
-	char dev[IF_NAMESIZE] = { 0, };
+	char dev[IF_NAMESIZE] = { 0, }, addr[16] = { 0, };
 	struct genlmsghdr *ghdr;
 	struct rtattr *attrs[MADCAP_ATTR_MAX + 1];
 	struct madcap_obj_config oc;
@@ -337,9 +344,10 @@ obj_config_nlmsg (const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	if_indextoname (ifindex, dev);
 
 	memcpy (&oc, RTA_DATA (attrs[MADCAP_ATTR_OBJ_CONFIG]), sizeof (oc));
+	inet_ntop (AF_INET, &oc.src, addr, sizeof (addr));
 
-	fprintf (stdout, "dev %s offset %u length %u\n", dev,
-		 oc.offset, oc.length);
+	fprintf (stdout, "dev %s offset %u length %u src %s\n", dev,
+		 oc.offset, oc.length, addr);
 
 	return 0;
 }

@@ -33,6 +33,7 @@ struct madcap_obj_config {
 	struct madcap_obj obj;
 	__u16	offset;
 	__u16	length;
+	__be32	src;	/* XXX: src ip address. should track ifa? */
 };
 
 struct madcap_obj_entry {
@@ -65,10 +66,7 @@ struct madcap_obj_udp {
 #include <linux/netlink.h>
 
 struct madcap_ops {
-	netdev_tx_t	(*mco_start_xmit) (struct sk_buff *skb,
-					   struct net_device *dev);
 	int		(*mco_if_rx) (struct sk_buff *skb);	/* ??? */
-	
 
 	/* vdev (pseudo NIC) acquires/releases dev (physical tunnel device) */
 	int		(*mco_acquire_dev) (struct net_device *dev,
@@ -97,6 +95,12 @@ struct madcap_ops {
 
 
 /* prototypes for madcap operations */
+
+/*	madcap_queue_xmit
+ *	@skb : transmiting packet encapsulated in protocol specific header(s)
+ *	@dev : madcap capable physical device
+ */
+netdev_tx_t madcap_queue_xmit (struct sk_buff *skb, struct net_device *dev);
 
 int madcap_acquire_dev (struct net_device *dev, struct net_device *vdev);
 int madcap_release_dev (struct net_device *dev, struct net_device *vdev);
