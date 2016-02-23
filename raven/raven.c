@@ -54,15 +54,13 @@ struct raven_dev {
 	struct net_device	*vdev;	/* overlay virtual device acquiring 
 					 * this raven device */
 
-	u16	length;		/* madcap identifier length */
-	u16	offset;		/* madcap identifier offset */
-
 #define RAVEN_HASH_BITS	8
 #define RAVEN_HASH_SIZE	(1 << RAVEN_HASH_BITS)
 	struct hlist_head	raven_table[RAVEN_HASH_SIZE]; /* hash table */
 	rwlock_t		lock;	/* table lock */
 
-	struct madcap_obj_udpencap ou;	/* enable udp encap */
+	struct madcap_obj_udp	 ou;	/* enable udp encap */
+	struct madcap_obj_config oc;	/* offset and length */
 };
 
 struct raven_net {
@@ -177,37 +175,27 @@ raven_release_dev (struct net_device *dev, struct net_device *vdev)
 }
 
 static int
-raven_llt_offset_cfg (struct net_device *dev, struct madcap_obj *obj)
+raven_llt_cfg (struct net_device *dev, struct madcap_obj *obj)
 {
 	struct raven_dev *rdev = netdev_priv (dev);
-	struct madcap_obj_offset *obj_off = MADCAP_OBJ_OFFSET (obj);
+	struct madcap_obj_config *oc = MADCAP_OBJ_CONFIG (obj);
 
-	if (rdev->offset != obj_off->offset) {
-		/* offset is changed. drop all table entry. */
+	if (memcmp (oc, &rdev->oc, sizeof (*oc)) != 0) {
+		/* offset or length is changed. drop all table entry. */
 		write_lock_bh (&rdev->lock);
 		raven_table_destroy (rdev);
-		rdev->offset = obj_off->offset;
+		rdev->oc = *oc;
 		write_unlock_bh (&rdev->lock);
 	}
 
 	return 0;
 }
 
-static int
-raven_llt_length_cfg (struct net_device *dev, struct madcap_obj *obj)
+static struct madcap_obj *
+raven_llt_config_get (struct net_device *dev)
 {
 	struct raven_dev *rdev = netdev_priv (dev);
-	struct madcap_obj_length *obj_len = MADCAP_OBJ_LENGTH (obj);
-
-	if (rdev->length != obj_len->length) {
-		/* length is changed. drop all table entry. */
-		write_lock_bh (&rdev->lock);
-		raven_table_destroy (rdev);
-		rdev->length = obj_len->length;
-		write_unlock_bh (&rdev->lock);
-	}
-
-	return 0;
+	return (struct madcap_obj *)(&rdev->oc);
 }
 
 static int
@@ -273,26 +261,34 @@ out:
 }
 
 static int
-raven_udpencap_cfg (struct net_device *dev, struct madcap_obj *obj)
+raven_udp_cfg (struct net_device *dev, struct madcap_obj *obj)
 {
-	struct madcap_obj_udpencap *ou;
+	struct madcap_obj_udp *ou;
 	struct raven_dev *rdev = netdev_priv (dev);
 
-	ou = MADCAP_OBJ_UDPENCAP (obj);
+	ou = MADCAP_OBJ_UDP (obj);
 
 	rdev->ou = *ou;
 	return 0;
 }
 
+static struct madcap_obj *
+raven_udp_config_get (struct net_device *dev)
+{
+	struct raven_dev *rdev = netdev_priv (dev);
+	return &rdev->ou.obj;
+}
+
 static struct madcap_ops raven_madcap_ops = {
 	.mco_acquire_dev	= raven_acquire_dev,
 	.mco_release_dev	= raven_release_dev,
-	.mco_llt_offset_cfg	= raven_llt_offset_cfg,
-	.mco_llt_length_cfg	= raven_llt_length_cfg,
+	.mco_llt_cfg		= raven_llt_cfg,
+	.mco_llt_config_get	= raven_llt_config_get,
 	.mco_llt_entry_add	= raven_llt_entry_add,
 	.mco_llt_entry_del	= raven_llt_entry_del,
 	.mco_llt_entry_dump	= raven_llt_entry_dump,
-	.mco_udpencap_cfg	= raven_udpencap_cfg,
+	.mco_udp_cfg		= raven_udp_cfg,
+	.mco_udp_config_get	= raven_udp_config_get,
 };
 
 
@@ -423,8 +419,9 @@ raven_setup (struct net_device *dev)
 	rwlock_init (&rdev->lock);
 	rdev->dev = dev;
 	rdev->vdev = NULL;	/* alloced by mco_acquire_dev */
-	rdev->length = 0;	/* cfged by mco_llt_length_cfg */
-	rdev->offset = 0;	/* cfged by mco_llt_offset_cfg */
+
+	rdev->ou.obj.id = MADCAP_OBJ_ID_UDP;
+	rdev->oc.obj.id = MADCAP_OBJ_ID_LLT_CONFIG;
 
 	for (n = 0; n < RAVEN_HASH_SIZE; n++)
 		INIT_HLIST_HEAD (&rdev->raven_table[n]);

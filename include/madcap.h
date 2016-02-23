@@ -19,24 +19,19 @@
 
 enum madcap_obj_id {
 	MADCAP_OBJ_ID_UNDEFINED,
-	MADCAP_OBJ_ID_LLT_OFFSET,
-	MADCAP_OBJ_ID_LLT_LENGTH,
+	MADCAP_OBJ_ID_LLT_CONFIG,
 	MADCAP_OBJ_ID_LLT_ENTRY,
-	MADCAP_OBJ_ID_UDPENCAP,
+	MADCAP_OBJ_ID_UDP,
 };
 
 struct madcap_obj {
 	enum madcap_obj_id id;
-	__u16	tb_id;	/* table id (queue?) */
+	__u16	tb_id;		/* table id (queue?) */
 };
 
-struct madcap_obj_offset {
+struct madcap_obj_config {
 	struct madcap_obj obj;
 	__u16	offset;
-};
-
-struct madcap_obj_length {
-	struct madcap_obj obj;
 	__u16	length;
 };
 
@@ -46,7 +41,7 @@ struct madcap_obj_entry {
 	__be32	dst;	/* dst ipv4 address (locator) */
 };
 
-struct madcap_obj_udpencap {
+struct madcap_obj_udp {
 	struct madcap_obj obj;
 	int	encap_enable;
 	int	src_hash_enable;
@@ -54,15 +49,14 @@ struct madcap_obj_udpencap {
 	__u16	src_port;
 };
 
-#define MADCAP_OBJ(obj_)	&(obj_.obj)
-#define MADCAP_OBJ_OFFSET(obj)	\
-	container_of (obj, struct madcap_obj_offset, obj)
-#define MADCAP_OBJ_LENGTH(obj)	\
-	container_of (obj, struct madcap_obj_length, obj)
+#define MADCAP_OBJ(obj_)	&((obj_).obj)
+#define MADCAP_IFINDEX(obj_) (obj_)->obj.ifindex
+#define MADCAP_OBJ_CONFIG(obj)	\
+	container_of (obj, struct madcap_obj_config, obj)
 #define MADCAP_OBJ_ENTRY(obj)	\
 	container_of (obj, struct madcap_obj_entry, obj)
-#define MADCAP_OBJ_UDPENCAP(obj)	\
-	container_of (obj, struct madcap_obj_udpencap, obj)
+#define MADCAP_OBJ_UDP(obj)	\
+	container_of (obj, struct madcap_obj_udp, obj)
 
 
 #ifdef __KERNEL__
@@ -82,22 +76,23 @@ struct madcap_ops {
 	int		(*mco_release_dev) (struct net_device *dev,
 					    struct net_device *vdev);
 
-	int		(*mco_llt_offset_cfg) (struct net_device *dev,
-					       struct madcap_obj *obj);
-	int		(*mco_llt_length_cfg) (struct net_device *dev,
-					       struct madcap_obj *obj);
+	int		(*mco_llt_cfg) (struct net_device *dev,
+					struct madcap_obj *obj);
 
 	int		(*mco_llt_entry_add) (struct net_device *dev,
 					      struct madcap_obj *obj);
 	int		(*mco_llt_entry_del) (struct net_device *dev,
 					      struct madcap_obj *obj);
 
-	int		(*mco_udpencap_cfg) (struct net_device *dev,
-					     struct madcap_obj *obj);
+	int		(*mco_udp_cfg) (struct net_device *dev,
+					struct madcap_obj *obj);
 
 	struct madcap_obj_entry *
 	(*mco_llt_entry_dump) (struct net_device *dev,
 			       struct netlink_callback *cb);
+
+	struct madcap_obj * (*mco_llt_config_get) (struct net_device *dev);
+	struct madcap_obj * (*mco_udp_config_get) (struct net_device *dev);
 };
 
 
@@ -106,17 +101,19 @@ struct madcap_ops {
 int madcap_acquire_dev (struct net_device *dev, struct net_device *vdev);
 int madcap_release_dev (struct net_device *dev, struct net_device *vdev);
 
-int madcap_llt_offset_cfg (struct net_device *dev, struct madcap_obj *obj);
-int madcap_llt_length_cfg (struct net_device *dev, struct madcap_obj *obj);
+int madcap_llt_cfg (struct net_device *dev, struct madcap_obj *obj);
 
 int madcap_llt_entry_add (struct net_device *dev, struct madcap_obj *obj);
 int madcap_llt_entry_del (struct net_device *dev, struct madcap_obj *obj);
 
-int madcap_udpencap_cfg (struct net_device *dev, struct madcap_obj *obj);
+int madcap_udp_cfg (struct net_device *dev, struct madcap_obj *obj);
 
 /* entry dump skb and cb is generic netlink. */
 struct madcap_obj_entry *  madcap_llt_entry_dump (struct net_device *dev,
 						  struct netlink_callback *cb);
+
+struct madcap_obj * madcap_llt_config_get (struct net_device *dev);
+struct madcap_obj * madcap_udp_config_get (struct net_device *dev);
 
 
 /* dev<->madcap_ops mappings are maintained in a table in madcap.ko
@@ -146,10 +143,12 @@ int madcap_unregister_device (struct net_device *dev);
 /* genl commands */
 enum {
 	MADCAP_CMD_LLT_CONFIG,
+	MADCAP_CMD_LLT_CONFIG_GET,
 	MADCAP_CMD_LLT_ENTRY_ADD,
 	MADCAP_CMD_LLT_ENTRY_DEL,
 	MADCAP_CMD_LLT_ENTRY_GET,
-	MADCAP_CMD_UDPENCAP_CONFIG,
+	MADCAP_CMD_UDP_CONFIG,
+	MADCAP_CMD_UDP_CONFIG_GET,
 
 	__MADCAP_CMD_MAX,
 };
@@ -159,10 +158,9 @@ enum {
 enum {
 	MADCAP_ATTR_NONE,		/* none */
 	MADCAP_ATTR_IFINDEX,		/* ifindex of madcap device */
-	MADCAP_ATTR_OBJ_OFFSET,		/* struct madcap_obj_offset */
-	MADCAP_ATTR_OBJ_LENGTH,		/* struct madcap_obj_length */
+	MADCAP_ATTR_OBJ_CONFIG,		/* struct madcap_obj_config */
 	MADCAP_ATTR_OBJ_ENTRY,		/* struct madcap_obj_entry */
-	MADCAP_ATTR_OBJ_UDPENCAP,	/* struct madcap_obj_udpencap */
+	MADCAP_ATTR_OBJ_UDP,		/* struct madcap_obj_udp */
 
 	__MADCAP_ATTR_MAX,
 };

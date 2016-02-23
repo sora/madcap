@@ -34,6 +34,8 @@ struct madcap_param {
 	int enable, disable, src_port_hash;
 	__u16 dst_port, src_port;
 
+	int config;
+
 	int f_offset, f_length;	/* offset and length may become 0 correctly */
 };
 
@@ -50,7 +52,7 @@ usage (void)
 		 "                              [ src-port [ PORT | hash ] ]\n"
 		 "                              [ enable | disable ] ]\n"
 		 "\n"
-		 "        ip madcap show [ dev DEVICE ]\n"
+		 "        ip madcap show [ config | udp ] [ dev DEVICE ]\n"
 		);
 
 	exit (-1);
@@ -119,6 +121,8 @@ parse_args (int argc, char ** argv, struct madcap_param *p)
 				invarg ("invalid dst-port", *argv);
 				exit (-1);
 			}
+		} else if (strcmp (*argv, "config") == 0) {
+			p->config = 1;
 		}
 
 		argc--;
@@ -193,10 +197,10 @@ do_del (int argc, char **argv)
 static int
 do_set_udp (struct madcap_param p)
 {
-	struct madcap_obj_udpencap ou;
+	struct madcap_obj_udp ou;
 
 	memset (&ou, 0, sizeof (ou));
-	ou.obj.id = MADCAP_OBJ_ID_UDPENCAP;
+	ou.obj.id = MADCAP_OBJ_ID_UDP;
 
 	if (p.enable)
 		ou.encap_enable = 1;
@@ -214,7 +218,7 @@ do_set_udp (struct madcap_param p)
 		ou.dst_port = htons (p.dst_port);
 
 	GENL_REQUEST (req, 1024, genl_family, 0, MADCAP_GENL_VERSION,
-		      MADCAP_CMD_UDPENCAP_CONFIG, NLM_F_REQUEST | NLM_F_ACK);
+		      MADCAP_CMD_UDP_CONFIG, NLM_F_REQUEST | NLM_F_ACK);
 
 	if (p.ifindex == 0) {
 		fprintf (stderr, "device must be specified\n");
@@ -223,8 +227,7 @@ do_set_udp (struct madcap_param p)
 		addattr32 (&req.n, 1024, MADCAP_ATTR_IFINDEX, p.ifindex);
 	}
 
-	addattr_l (&req.n, 1024, MADCAP_ATTR_OBJ_UDPENCAP,
-		   &ou, sizeof (ou));
+	addattr_l (&req.n, 1024, MADCAP_ATTR_OBJ_UDP, &ou, sizeof (ou));
 
 	if (rtnl_talk (&genl_rth, &req.n, NULL, 0) < 0)
 		return -2;
@@ -236,8 +239,7 @@ static int
 do_set (int argc, char **argv)
 {
 	struct madcap_param p;
-	struct madcap_obj_offset of;
-	struct madcap_obj_length ol;
+	struct madcap_obj_config oc;
 
 	parse_args (argc, argv, &p);
 
@@ -255,24 +257,18 @@ do_set (int argc, char **argv)
 		addattr32 (&req.n, 1024, MADCAP_ATTR_IFINDEX, p.ifindex);
 	}
 
-	if (p.f_offset) {
+	if (p.f_offset && p.f_length) {
 		/* config offset */
-		memset (&of, 0, sizeof (of));
-		of.obj.id	= MADCAP_OBJ_ID_LLT_OFFSET;
-		of.obj.tb_id	= 0;	/* XXX */
-		of.offset	= p.offset;
-		addattr_l (&req.n, 1024, MADCAP_ATTR_OBJ_OFFSET,
-			   &of, sizeof (of));
-	}
-
-	if (p.f_length) {
-		/* config length */
-		memset (&ol, 0, sizeof (ol));
-		ol.obj.id	= MADCAP_OBJ_ID_LLT_LENGTH;
-		ol.obj.tb_id	= 0;	/* XXX */
-		ol.length	= p.length;
-		addattr_l (&req.n, 1024, MADCAP_ATTR_OBJ_LENGTH,
-			   &ol, sizeof (ol));
+		memset (&oc, 0, sizeof (oc));
+		oc.obj.id	= MADCAP_OBJ_ID_LLT_CONFIG;
+		oc.obj.tb_id	= 0;	/* XXX */
+		oc.offset	= p.offset;
+		oc.length	= p.length;
+		addattr_l (&req.n, 1024, MADCAP_ATTR_OBJ_CONFIG,
+			   &oc, sizeof (oc));
+	} else {
+		fprintf (stderr, "offset and length must be specified\n");
+		exit (-1);
 	}
 
 	if (rtnl_talk (&genl_rth, &req.n, NULL, 0) < 0)
@@ -285,16 +281,13 @@ static int
 obj_entry_nlmsg (const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 {
 	int len;
+	__u32 ifindex;
 	char dev[IF_NAMESIZE] = { 0, };
 	char dst[16] = { 0, };
-	struct madcap_param *p = arg;
 	struct genlmsghdr *ghdr;
 	struct rtattr *attrs[MADCAP_ATTR_MAX + 1];
 	struct madcap_obj_entry oe;
 	
-	if (!if_indextoname (p->ifindex, dev))
-		return -1;
-
 	ghdr = NLMSG_DATA (n);
 	len = n->nlmsg_len - NLMSG_LENGTH (sizeof (*ghdr));
 	if (len < 0)
@@ -304,10 +297,149 @@ obj_entry_nlmsg (const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	if (!attrs[MADCAP_ATTR_OBJ_ENTRY])
 		return -1;
 
+	if (!attrs[MADCAP_ATTR_IFINDEX])
+		return -1;
+
+	ifindex = rta_getattr_u32 (attrs[MADCAP_ATTR_IFINDEX]);
+	if_indextoname (ifindex, dev);
+
 	memcpy (&oe, RTA_DATA (attrs[MADCAP_ATTR_OBJ_ENTRY]), sizeof (oe));
 	inet_ntop (AF_INET, &oe.dst, dst, sizeof (dst));
 	
-	fprintf (stdout, "id %llu dst %s dev %s\n", oe.id, dst, dev);
+	fprintf (stdout, "dev %s id %llu dst %s\n", dev, oe.id, dst);
+	return 0;
+}
+
+static int
+obj_config_nlmsg (const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
+{
+	int len;
+	__u32 ifindex;
+	char dev[IF_NAMESIZE] = { 0, };
+	struct genlmsghdr *ghdr;
+	struct rtattr *attrs[MADCAP_ATTR_MAX + 1];
+	struct madcap_obj_config oc;
+
+	ghdr = NLMSG_DATA (n);
+	len = n->nlmsg_len - NLMSG_LENGTH (sizeof (*ghdr));
+	if (len < 0)
+		return -1;
+
+	parse_rtattr (attrs, MADCAP_ATTR_MAX, (void *)ghdr + GENL_HDRLEN, len);
+
+	if (!attrs[MADCAP_ATTR_OBJ_CONFIG])
+		return -1;
+
+	if (!attrs[MADCAP_ATTR_IFINDEX])
+		return -1;
+
+	ifindex = rta_getattr_u32 (attrs[MADCAP_ATTR_IFINDEX]);
+	if_indextoname (ifindex, dev);
+
+	memcpy (&oc, RTA_DATA (attrs[MADCAP_ATTR_OBJ_CONFIG]), sizeof (oc));
+
+	fprintf (stdout, "dev %s offset %u length %u\n", dev,
+		 oc.offset, oc.length);
+
+	return 0;
+}
+
+static int
+obj_udp_nlmsg (const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
+{
+	int len;
+	__u32 ifindex;
+	char dev[IF_NAMESIZE] = { 0, };
+	struct genlmsghdr *ghdr;
+	struct rtattr *attrs[MADCAP_ATTR_MAX + 1];
+	struct madcap_obj_udp ou;
+
+	ghdr = NLMSG_DATA (n);
+	len = n->nlmsg_len - NLMSG_LENGTH (sizeof (*ghdr));
+	if (len < 0)
+		return -1;
+
+	parse_rtattr (attrs, MADCAP_ATTR_MAX, (void *)ghdr + GENL_HDRLEN, len);
+
+	if (!attrs[MADCAP_ATTR_OBJ_UDP])
+		return -1;
+
+	if (!attrs[MADCAP_ATTR_IFINDEX])
+		return -1;
+
+	ifindex = rta_getattr_u32 (attrs[MADCAP_ATTR_IFINDEX]);
+	if_indextoname (ifindex, dev);
+
+	memcpy (&ou, RTA_DATA (attrs[MADCAP_ATTR_OBJ_UDP]), sizeof (ou));
+
+	if (!ou.encap_enable) {
+		fprintf (stdout, "dev %s udp disable\n", dev);
+	} else {
+		char dst_port[8], src_port[8];
+		sprintf (dst_port, "%d", ntohs (ou.dst_port));
+		if (ou.src_hash_enable)
+			sprintf (src_port, "hash");
+		else
+			sprintf (src_port, "%d", ntohs (ou.src_port));
+
+		fprintf (stdout, "dev %s udp enable dst-port %s src-port %s\n",
+			 dev, dst_port, src_port);
+	}
+
+	return 0;
+}
+
+static int
+do_show_config (struct madcap_param p)
+{
+	int ret;
+
+	GENL_REQUEST (req, 2048, genl_family, 0,
+		      MADCAP_GENL_VERSION, MADCAP_CMD_LLT_CONFIG_GET,
+		      NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST);
+
+	if (p.ifindex) {
+		addattr32 (&req.n, 1024, MADCAP_ATTR_IFINDEX, p.ifindex);
+		req.n.nlmsg_seq = genl_rth.dump = ++genl_rth.seq;
+	}
+	ret = rtnl_send (&genl_rth, &req.n, req.n.nlmsg_len);
+	if (ret < 0) {
+		fprintf (stderr, "%s:%d: error\n", __func__, __LINE__);
+		return -2;
+	}
+
+	if (rtnl_dump_filter (&genl_rth, obj_config_nlmsg, NULL) < 0) {
+		fprintf (stderr, "Dump terminated\n");
+		exit (1);
+	}
+
+	return 0;
+}
+
+static int
+do_show_udp (struct madcap_param p)
+{
+	int ret;
+
+	GENL_REQUEST (req, 2048, genl_family, 0,
+		      MADCAP_GENL_VERSION, MADCAP_CMD_UDP_CONFIG_GET,
+		      NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST);
+
+	if (p.ifindex) {
+		addattr32 (&req.n, 1024, MADCAP_ATTR_IFINDEX, p.ifindex);
+		req.n.nlmsg_seq = genl_rth.dump = ++genl_rth.seq;
+	}
+	ret = rtnl_send (&genl_rth, &req.n, req.n.nlmsg_len);
+	if (ret < 0) {
+		fprintf (stderr, "%s:%d: error\n", __func__, __LINE__);
+		return -2;
+	}
+
+	if (rtnl_dump_filter (&genl_rth, obj_udp_nlmsg, NULL) < 0) {
+		fprintf (stderr, "Dump terminated\n");
+		exit (1);
+	}
+
 	return 0;
 }
 
@@ -324,17 +456,21 @@ do_show (int argc, char **argv)
 
 	parse_args (argc, argv, &p);
 	
-	if (p.ifindex == 0) {
-		fprintf (stderr, "device must be specified\n");
-		exit (-1);
-	}
+	if (p.config)
+		return do_show_config (p);
+
+	if (p.udp)
+		return do_show_udp (p);
+
 
 	GENL_REQUEST (req, 2048, genl_family, 0,
 		      MADCAP_GENL_VERSION, MADCAP_CMD_LLT_ENTRY_GET,
 		      NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST);
 
-	addattr32 (&req.n, 1024, MADCAP_ATTR_IFINDEX, p.ifindex);
-	req.n.nlmsg_seq = genl_rth.dump = ++genl_rth.seq;
+	if (p.ifindex) {
+		addattr32 (&req.n, 1024, MADCAP_ATTR_IFINDEX, p.ifindex);
+		req.n.nlmsg_seq = genl_rth.dump = ++genl_rth.seq;
+	}
 
 	ret = rtnl_send (&genl_rth, &req.n, req.n.nlmsg_len);
 	if (ret < 0) {
