@@ -11,9 +11,10 @@
 #include <net/net_namespace.h>
 #include <net/rtnetlink.h>
 #include <net/ip_tunnels.h>
-
+#include <net/udp.h>
 
 #include "../include/madcap.h"
+#include "../include/raven.h"
 
 #ifndef DEBUG
 #define DEBUG
@@ -63,6 +64,8 @@ struct raven_dev {
 
 	struct net_device	*vdev;	/* overlay virtual device acquiring 
 					 * this raven device */
+	struct net_device	*pdev;	/* physicl device to xmit encapsulated
+					 * packet */
 
 #define RAVEN_HASH_BITS	8
 #define RAVEN_HASH_SIZE	(1 << RAVEN_HASH_BITS)
@@ -315,29 +318,35 @@ raven_xmit (struct sk_buff *skb, struct net_device *dev)
 	 * - Should I implement this to existing drivers for normal NIC?
 	 */
 
-	int headroom, err;
+	int err;
 	struct pcpu_sw_netstats *tx_stats;
 	struct raven_dev *rdev = netdev_priv (dev);
 	struct raven_table *rt;
+	struct udphdr *uh;
 
 	if (drop_mode)
 		goto out;
 
-	/* alloc headroom */
-	headroom = (rdev->ou.encap_enable) ? 14 + 20 + 8: 14 + 20;
-	err = skb_cow_head (skb, headroom);
-	if (unlikely (err)) {
-		kfree_skb (skb);
-		return -ENOMEM;
-	}
-
+	/* build udp header */
 	if (rdev->ou.encap_enable) {
-		/* build udp header */
-		struct udphdr *uh;
+
+		err = skb_cow_head (skb, sizeof (*uh));
+		if (unlikely (err)) {
+			kfree_skb (skb);
+			return -ENOMEM;
+		}
+
 		uh = (struct udphdr *) __skb_push (skb, sizeof (*uh));
-		uh->dest = rdev->ou.dst_port;
-		uh->source = rdev->ou.src_port;
-		uh->len = htons (skb->len);
+		uh->dest	= rdev->ou.dst_port;
+		uh->source	= rdev->ou.src_port;
+		uh->len		= htons (skb->len);
+		uh->check	= 0;
+
+		/* XXX: For checksum calculation, ToS, TTL etc are
+		 * specified on routing table in switchdev.
+		 */
+
+		skb_reset_transport_header (skb);
 	}
 
 out:
@@ -396,8 +405,20 @@ raven_newlink (struct net *net, struct net_device *dev,
 	       struct nlattr *tb[], struct nlattr *data[])
 {
 	int err;
+	u32 ifindex;
+	struct net_device *pdev = NULL;
 	struct raven_net *rnet = net_generic (net, raven_net_id);
 	struct raven_dev *rdev = netdev_priv (dev);
+
+	if (data && data[IFLA_RAVEN_PHYSICAL_DEV]) {
+		ifindex = nla_get_u32 (data[IFLA_RAVEN_PHYSICAL_DEV]);
+		pdev = __dev_get_by_index (net, ifindex);
+		if (!pdev) {
+			pr_debug ("%s: no device found, index %u",
+				  __func__, ifindex);
+		}
+		rdev->pdev = pdev;
+	}
 
 	err = register_netdevice (dev);
 	if (err) {
@@ -461,12 +482,37 @@ raven_setup (struct net_device *dev)
 		INIT_HLIST_HEAD (&rdev->raven_table[n]);
 }
 
+static size_t
+raven_get_size (const struct net_device *dev)
+{
+	/* IFLA_RAVEN_PHYSICAL_DEV */
+	return nla_total_size (sizeof (__u32)) + 0;
+}
+
+static int
+raven_fill_info (struct sk_buff *skb, const struct net_device *dev)
+{
+	__u32 ifindex = 0;
+	const struct raven_dev *rdev = netdev_priv (dev);
+
+	if (rdev->pdev)
+		ifindex = rdev->pdev->ifindex;
+
+	if (nla_put_u32 (skb, IFLA_RAVEN_PHYSICAL_DEV, ifindex))
+		return -EMSGSIZE;
+
+	return 0;
+}
+
 static struct rtnl_link_ops raven_link_ops __read_mostly = {
 	.kind		= "raven",
+	.maxtype	= IFLA_RAVEN_MAX,
 	.priv_size	= sizeof (struct raven_dev),
 	.setup		= raven_setup,
 	.newlink	= raven_newlink,
 	.dellink	= raven_dellink,
+	.get_size	= raven_get_size,
+	.fill_info	= raven_fill_info,
 };
 
 static __net_init int

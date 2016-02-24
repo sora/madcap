@@ -5,16 +5,22 @@
 s=sudo
 ip=./iproute2-4.4.0/ip/ip
 
-echo unload/load modules, create and setup raven interface 'r0' and 'r1'
+echo - unload/load modules, create and setup raven interface 'r0' and 'r1'
 $s rmmod raven
 $s rmmod madcap
 
 $s insmod madcap/madcap.ko
 $s insmod raven/raven.ko
 
-$s ip link add name r0 type raven
-$s ip link add name r1 type raven
+$s $ip link add name r0 type raven link eth0
+$s $ip link add name r1 type raven link eth0
 
+echo
+$ip -d link show dev r0
+$ip -d link show dev r1
+
+echo
+echo - config llt and add table entries
 $s $ip madcap set dev r0 offset 10 length 10 src 192.168.1.30
 $s $ip madcap set dev r1 offset 11 length 11 src 192.168.1.30
 
