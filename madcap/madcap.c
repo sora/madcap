@@ -59,8 +59,8 @@ madcap_queue_xmit (struct sk_buff *skb, struct net_device *dev)
 	/* XXX: physical device is also shared resource for multiple
 	 * pseudo interfaces for overlays (e.g, multiple vxlan
 	 * interfaces for each VNI). So, some queueing and locking
-	 * between pseudo interfaces and a physical interface.
-	 * HOWEVER, this model shouled be more considered.
+	 * between pseudo interfaces and a physical interface are
+	 * needed. HOWEVER, this model shouled be more considered.
 	 */
 
 	skb->dev = dev;
@@ -644,6 +644,8 @@ madcap_register_device (struct net_device *dev, struct madcap_ops *mc_ops)
 	write_unlock_bh (&madnet->lock);
 
 	if (!(n < MADCAPDEV_PERNET_NUM)) {
+		pr_info ("sorry, max number of madcap dev in a netns is %d",
+			 MADCAPDEV_PERNET_NUM);
 		return -ENOMEM;
 	}
 

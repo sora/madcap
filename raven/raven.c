@@ -447,6 +447,7 @@ raven_dellink (struct net_device *dev, struct list_head *head)
 	write_unlock_bh (&rdev->lock);
 
 	list_del_rcu (&rdev->list);
+	madcap_unregister_device (dev);
 	unregister_netdevice_queue (dev, head);
 }
 
