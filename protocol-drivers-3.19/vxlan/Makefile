@@ -2,14 +2,7 @@ KERNELSRCDIR := /lib/modules/$(shell uname -r)/build
 BUILD_DIR := $(shell pwd)
 VERBOSE = 0
 
-obj-y := madcap/ raven/ \
-	protocol-drivers-3.19/gre/	\
-	protocol-drivers-3.19/ipip/	\
-	protocol-drivers-3.19/vxlan/	\
-	protocol-drivers-3.19/nsh/	\
-
-subdir-ccflags-y := -I$(src)/include
-
+obj-m := vxlan.o
 
 all:
 	make -C $(KERNELSRCDIR) M=$(BUILD_DIR) V=$(VERBOSE) modules
