@@ -27,6 +27,7 @@ struct madcap_param {
 	__u32 ifindex;
 	__u16 offset;
 	__u16 length;
+	__u8 proto;
 	__u64 id;
 	__u32 dst, src;
 
@@ -48,7 +49,7 @@ usage (void)
 		 "\n"
 		 "        ip madcap set [ dev DEVICE ] "
 		 "[ offset OFFSET ] [ length LENGTH ]\n"
-		 "                      [ src IPADDR ]\n"
+		 "                      [ src IPADDR ] [ proto IPPROTO ]\n"
 		 "                      [ udp [ [ dst-port [ PORT ] ]\n"
 		 "                              [ src-port [ PORT | hash ] ]\n"
 		 "                              [ enable | disable ] ]\n"
@@ -88,6 +89,18 @@ parse_args (int argc, char ** argv, struct madcap_param *p)
 				exit (-1);
 			}
 			p->f_length = 1;
+		} else if (strcmp (*argv, "proto") == 0) {
+			NEXT_ARG ();
+			if (strcmp (*argv, "udp") == 0) {
+				p->proto = IPPROTO_UDP;
+			} else if (strcmp (*argv, "ip") == 0) {
+				p->proto = IPPROTO_IP;
+			} else if (strcmp (*argv, "gre") == 0) {
+				p->proto = IPPROTO_GRE;
+			} else 	if (get_u8 (&p->proto, *argv, 0)) {
+				invarg ("proto", *argv);
+				exit (-1);
+			}
 		} else if (strcmp (*argv, "id") == 0) {
 			NEXT_ARG ();
 			if (get_u64 (&p->id, *argv, 0)) {
@@ -271,6 +284,7 @@ do_set (int argc, char **argv)
 		oc.obj.tb_id	= 0;	/* XXX */
 		oc.offset	= p.offset;
 		oc.length	= p.length;
+		oc.proto	= p.proto;
 		oc.src		= p.src;
 		addattr_l (&req.n, 1024, MADCAP_ATTR_OBJ_CONFIG,
 			   &oc, sizeof (oc));
@@ -347,8 +361,8 @@ obj_config_nlmsg (const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	memcpy (&oc, RTA_DATA (attrs[MADCAP_ATTR_OBJ_CONFIG]), sizeof (oc));
 	inet_ntop (AF_INET, &oc.src, addr, sizeof (addr));
 
-	fprintf (stdout, "dev %s offset %u length %u src %s\n", dev,
-		 oc.offset, oc.length, addr);
+	fprintf (stdout, "dev %s offset %u length %u proto %u src %s\n",
+		 dev, oc.offset, oc.length, oc.proto, addr);
 
 	return 0;
 }

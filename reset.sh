@@ -21,8 +21,8 @@ $ip -d link show dev r1
 
 echo
 echo - config llt and add table entries
-$s $ip madcap set dev r0 offset 10 length 10 src 192.168.1.30
-$s $ip madcap set dev r1 offset 11 length 11 src 192.168.1.30
+$s $ip madcap set dev r0 offset 10 length 10 proto udp
+$s $ip madcap set dev r1 offset 11 length 11 proto ip
 
 $s $ip madcap add id 11 dst 1.1.1.1 dev r0
 $s $ip madcap add id 12 dst 2.2.2.2 dev r0

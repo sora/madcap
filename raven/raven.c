@@ -11,7 +11,6 @@
 #include <net/net_namespace.h>
 #include <net/rtnetlink.h>
 #include <net/ip_tunnels.h>
-#include <net/udp.h>
 
 #include "../include/madcap.h"
 #include "../include/raven.h"
@@ -51,7 +50,7 @@ struct raven_table {
 	struct net_device	*dev;
 	unsigned long		updated;	/* jiffies */
 
-	struct madcap_obj_entry	obj_ent;
+	struct madcap_obj_entry	oe;
 
 	u64	id;	/* key */
 	__be32	dst;	/* ipv4 dst */
@@ -90,7 +89,7 @@ raven_table_head (struct raven_dev *rdev, u64 key)
 }
 
 struct raven_table *
-raven_table_add (struct raven_dev *rdev, u64 id, __be32 dst)
+raven_table_add (struct raven_dev *rdev, struct madcap_obj_entry *oe)
 {
 	struct raven_table *rt;
 
@@ -101,12 +100,11 @@ raven_table_add (struct raven_dev *rdev, u64 id, __be32 dst)
 
 	memset (rt, 0, sizeof (*rt));
 
-	rt->id = id;
-	rt->dst = dst;
 	rt->dev = rdev->dev;
 	rt->updated = jiffies;
+	rt->oe = *oe;
 
-	hlist_add_head_rcu (&rt->hlist, raven_table_head (rdev, id));
+	hlist_add_head_rcu (&rt->hlist, raven_table_head (rdev, oe->id));
 
 	return rt;
 }
@@ -218,11 +216,9 @@ raven_llt_entry_add (struct net_device *dev, struct madcap_obj *obj)
 	struct madcap_obj_entry *obj_ent = MADCAP_OBJ_ENTRY (obj);
 	struct raven_table *rt;
 
-	rt = raven_table_add (rdev, obj_ent->id, obj_ent->dst);
+	rt = raven_table_add (rdev, obj_ent);
 	if (!rt)
 		return -ENOMEM;
-
-	rt->obj_ent = *obj_ent;
 
 	return 0;
 }
@@ -251,10 +247,10 @@ raven_llt_entry_dump (struct net_device *dev, struct netlink_callback *cb)
 	unsigned int n;
 	struct raven_dev *rdev = netdev_priv (dev);
 	struct raven_table *rt;
-	struct madcap_obj_entry *obj_ent;
+	struct madcap_obj_entry *oe;
 
 	idx = cb->args[0];
-	obj_ent = NULL;
+	oe = NULL;
 
 	for (n = 0, cnt = 0; n < RAVEN_HASH_SIZE; n++) {
 		hlist_for_each_entry_rcu (rt, &rdev->raven_table[n], hlist) {
@@ -263,14 +259,14 @@ raven_llt_entry_dump (struct net_device *dev, struct netlink_callback *cb)
 				continue;
 			}
 
-			obj_ent = &rt->obj_ent;
+			oe = &rt->oe;
 			goto out;
 		}
 	}
 
 out:
 	cb->args[0] = cnt + 1;
-	return obj_ent;
+	return oe;
 }
 
 static int
@@ -305,6 +301,20 @@ static struct madcap_ops raven_madcap_ops = {
 };
 
 
+static inline __u64
+extract_id_from_packet (struct sk_buff *skb, struct madcap_obj_config *oc)
+{
+	int n;
+	__u64 id;
+
+	id = *((__u64 *)(skb->data + oc->offset));
+
+	for (n = 0; n < (64 - oc->length); n++)
+		id >>= 1;
+
+	return id;
+}
+
 static netdev_tx_t
 raven_xmit (struct sk_buff *skb, struct net_device *dev)
 {
@@ -318,36 +328,64 @@ raven_xmit (struct sk_buff *skb, struct net_device *dev)
 	 * - Should I implement this to existing drivers for normal NIC?
 	 */
 
-	int err;
-	struct pcpu_sw_netstats *tx_stats;
-	struct raven_dev *rdev = netdev_priv (dev);
+	int err, headroom;
+	__u64 id;
 	struct raven_table *rt;
-	struct udphdr *uh;
+	struct raven_dev *rdev = netdev_priv (dev);
+	struct pcpu_sw_netstats *tx_stats;
+	struct flowi4 fl4;
+	struct rtable *irt;
 
 	if (drop_mode)
 		goto out;
 
+	/* find destination address */
+	id = extract_id_from_packet (skb, &rdev->oc);
+	rt = raven_table_find (rdev, id);
+	if (!rt) {
+		/* find default destination, id 0 */
+		rt = raven_table_find (rdev, 0);
+		kfree_skb (skb);
+	}
+
+	if (!rt) {
+		netdev_dbg (dev, "no dst entry for id %llu", id);
+		goto tx_err;
+	}
+
+	/* rouitng lookup */
+	fl4.daddr = rt->dst;
+	fl4.saddr = rdev->oc.src;
+	irt = ip_route_output_key (dev_net (dev), &fl4);
+	if (IS_ERR (irt)) {
+		kfree_skb (skb);
+		return -ENOMEM;
+	}
+
 	/* build udp header */
+
+	headroom = rdev->ou.encap_enable ? 14 + 20 + 16 : 14 + 20;
+	err = skb_cow_head (skb, headroom);
+	if (unlikely (err)) {
+		kfree_skb (skb);
+		return -ENOMEM;
+	}
+
 	if (rdev->ou.encap_enable) {
-
-		err = skb_cow_head (skb, sizeof (*uh));
-		if (unlikely (err)) {
-			kfree_skb (skb);
-			return -ENOMEM;
-		}
-
+		struct udphdr *uh;
 		uh = (struct udphdr *) __skb_push (skb, sizeof (*uh));
+		skb_reset_transport_header (skb);
+
 		uh->dest	= rdev->ou.dst_port;
 		uh->source	= rdev->ou.src_port;
 		uh->len		= htons (skb->len);
-		uh->check	= 0;
-
-		/* XXX: For checksum calculation, ToS, TTL etc are
-		 * specified on routing table in switchdev.
-		 */
-
-		skb_reset_transport_header (skb);
+		uh->check	= 0;	/* XXX: */
 	}
+
+	err = iptunnel_xmit (skb->sk, irt, skb, fl4.saddr, fl4.daddr,
+			     rdev->oc.proto, 0, 16, 0, false);
+	if (err < 0)
+		goto tx_err;
 
 out:
 	tx_stats = this_cpu_ptr (dev->tstats);
@@ -356,7 +394,15 @@ out:
 	tx_stats->tx_bytes += skb->len;
 	u64_stats_update_end (&tx_stats->syncp);
 
-	kfree_skb (skb);
+	if (drop_mode) {
+		kfree_skb (skb);
+		return NETDEV_TX_OK;
+	}
+
+	return NETDEV_TX_OK;
+
+tx_err:
+	dev->stats.tx_errors++;
 
 	return NETDEV_TX_OK;
 }

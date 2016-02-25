@@ -33,6 +33,7 @@ struct madcap_obj_config {
 	struct madcap_obj obj;
 	__u16	offset;
 	__u16	length;
+	__u8	proto;	/* IP protocol number. */
 	__be32	src;	/* XXX: src ip address. should track ifa? */
 };
 
@@ -46,8 +47,8 @@ struct madcap_obj_udp {
 	struct madcap_obj obj;
 	int	encap_enable;
 	int	src_hash_enable;
-	__u16	dst_port;
-	__u16	src_port;
+	__be16	dst_port;
+	__be16	src_port;
 };
 
 #define MADCAP_OBJ(obj_)	&((obj_).obj)
