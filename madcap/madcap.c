@@ -11,8 +11,7 @@
 #include <net/genetlink.h>
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
-
-#include "../include/madcap.h"	/* XXX */
+#include <madcap.h>
 
 #ifndef DEBUG
 #define DEBUG

@@ -12,8 +12,8 @@
 #include <net/rtnetlink.h>
 #include <net/ip_tunnels.h>
 
-#include "../include/madcap.h"
-#include "../include/raven.h"
+#include <madcap.h>
+#include <raven.h>
 
 #ifndef DEBUG
 #define DEBUG
