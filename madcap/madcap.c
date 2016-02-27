@@ -52,7 +52,7 @@ struct madcap_net {
  * not implemented...
  */
 
-netdev_tx_t
+int
 madcap_queue_xmit (struct sk_buff *skb, struct net_device *dev)
 {
 	/* XXX: physical device is also shared resource for multiple

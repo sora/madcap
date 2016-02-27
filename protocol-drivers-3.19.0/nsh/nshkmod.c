@@ -22,6 +22,9 @@
 
 #include "nshkmod.h"
 
+/* madcapable version */
+#include <madcap.h>
+
 /*
  *
  * Network Service Header format.
@@ -394,6 +397,25 @@ static int nsh_xmit_vxlan_skb(struct socket *sock, struct net * net,
 				   0, src_port, dst_port, net);
 }
 
+static int nsh_xmit_vxlan_madcap (struct sk_buff *skb, struct net_device *dev,
+				  __be32 vni)
+{
+	int err;
+	struct vxlanhdr *vxh;
+
+	err = skb_cow_head(skb, VXLAN_HEADROOM);
+	if (unlikely(err)) {
+		kfree_skb(skb);
+		return -ENOMEM;
+	}
+
+	vxh = (struct vxlanhdr *)__skb_push(skb, sizeof(*vxh));
+	vxh->vx_flags = htonl(VXLAN_GPE_FLAGS | VXLAN_GPE_PROTO_NSH);
+	vxh->vx_vni = htonl(vni << 8);
+
+	return madcap_queue_xmit (skb, dev);
+}
+
 static int nsh_xmit_vxlan(struct sk_buff *skb, struct nsh_net *nnet,
 			  struct nsh_dev *ndev, struct nsh_table *nt,
 			  __be16 src_port)
@@ -401,9 +423,16 @@ static int nsh_xmit_vxlan(struct sk_buff *skb, struct nsh_net *nnet,
 	struct flowi4 fl4;
 	struct rtable *rt;
 
+	if (nt->rdst->lowerdev && get_madcap_ops (nt->rdst->lowerdev)) {
+		return nsh_xmit_vxlan_madcap (skb, nt->rdst->lowerdev,
+					      nt->rdst->vni);
+	}
+
 	memset(&fl4, 0, sizeof(fl4));
 	fl4.daddr = nt->rdst->remote_ip;
 	fl4.saddr = nt->rdst->local_ip;
+	if (nt->rdst->lowerdev)
+		fl4.flowi4_oif = nt->rdst->lowerdev->ifindex;
 
 	rt = ip_route_output_key(dev_net(ndev->dev), &fl4);
 	if (IS_ERR(rt)) {
@@ -933,6 +962,23 @@ static int nsh_nl_cmd_path_dst_set(struct sk_buff *skb,
 		dst->local_ip = local;
 		dst->vni = vni;
 
+		if (info->attrs[NSHKMOD_ATTR_IFINDEX]) {
+			ifindex =
+				nla_get_u32(info->attrs[NSHKMOD_ATTR_IFINDEX]);
+			lowerdev = __dev_get_by_index (net, ifindex);
+			if (!lowerdev) {
+				pr_debug ("ifindex %d does not exist\n",
+					  ifindex);
+				return -ENODEV;
+			}
+			if (lowerdev->netdev_ops == &nsh_netdev_ops) {
+				pr_debug("nsh device can't become "
+					 "link of a path\n");
+				return -EINVAL;
+			}
+			dst->lowerdev = lowerdev;
+		}
+
 		nsh_add_table(nnet, key, mdtype, encap_type, NULL, dst);
 		break;
 
@@ -1126,9 +1172,15 @@ static int nsh_nl_table_send(struct sk_buff *skb, u32 portid, u32 seq,
 		    nla_put_u32(skb, NSHKMOD_ATTR_VNI, dst->vni))
 			goto nla_put_failure;
 
-		if (nt->rdst->local_ip) {
+		if (dst->local_ip) {
 			if (nla_put_be32(skb, NSHKMOD_ATTR_LOCAL,
 					  dst->local_ip))
+				goto nla_put_failure;
+		}
+
+		if (dst->lowerdev) {
+			if (nla_put_u32 (skb, NSHKMOD_ATTR_IFINDEX,
+					 dst->lowerdev->ifindex))
 				goto nla_put_failure;
 		}
 

@@ -1892,8 +1892,7 @@ static int vxlan_xmit_madcap (struct sk_buff *skb, struct net_device *dev)
 
 	skb_set_inner_protocol (skb, htons (ETH_P_TEB));
 
-	madcap_queue_xmit (skb, vxlan->mcdev);
-	return 0;
+	return madcap_queue_xmit (skb, vxlan->mcdev);
 }
 
 /* Transmit local packets over Vxlan

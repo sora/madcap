@@ -9,6 +9,7 @@ $s rmmod ipip
 $s rmmod ip_gre
 $s rmmod gre
 $s rmmod vxlan
+$s rmmod nshkmod
 
 $s rmmod raven
 $s rmmod madcap
@@ -69,3 +70,21 @@ $s $ip link add type vxlan local 172.16.0.1 remote 172.16.0.2 id 0 dev r2-vxlan
 $s ifconfig vxlan0 up
 $s ifconfig vxlan0 172.16.4.1/24
 $s arp -s 172.16.4.2 7a:a3:28:27:a3:a9
+
+
+echo setup nsh
+ni=nsh/iproute2-3.19.0/ip/ip
+$s insmod nsh/nshkmod.ko
+
+$s $ip link add name r3-nsh type raven
+$s $ip madcap set dev r3-nsh offset 12 length 32 proto udp
+$s $ip madcap set dev r3-nsh udp enable dst-port 4790 src-port 4790
+$s $ip madcap add dev r3-nsh id 0 dst 10.10.10.10
+$s ifconfig r3-nsh up
+
+$s $ni link add type nsh spi 10 si 5
+$s ifconfig nsh0 up
+$s ifconfig nsh0 172.16.5.1/24
+$s arp -s 172.16.5.2 7a:a3:28:27:a3:ab
+
+$s $ni nsh add spi 10 si 5 encap vxlan remote 172.16.0.2 local 172.16.0.1 vni 0 dev r3-nsh

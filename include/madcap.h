@@ -101,7 +101,7 @@ struct madcap_ops {
  *	@skb : transmiting packet encapsulated in protocol specific header(s)
  *	@dev : madcap capable physical device
  */
-netdev_tx_t madcap_queue_xmit (struct sk_buff *skb, struct net_device *dev);
+int madcap_queue_xmit (struct sk_buff *skb, struct net_device *dev);
 
 int madcap_acquire_dev (struct net_device *dev, struct net_device *vdev);
 int madcap_release_dev (struct net_device *dev, struct net_device *vdev);
