@@ -15,6 +15,10 @@
 #include <madcap.h>
 #include <raven.h>
 
+#ifdef OVBENCH
+#include <ovbench2.h>
+#endif
+
 #ifndef DEBUG
 #define DEBUG
 #endif
@@ -72,12 +76,83 @@ struct raven_dev {
 	struct madcap_obj_config oc;	/* offset and length */
 };
 
+
+#ifdef OVBENCH
+/* ovbench recent packet timestamp information. */
+static __u8	ovbench_type;
+static __u64	ovbench_timestamp[17];	/* 16 is raven_xmit */
+
+static inline void
+copy_ovbench_params (struct sk_buff *skb, struct raven_dev *rdev)
+{
+	int n;
+
+	rdev->ovbench_type = skb->ovbench_type;
+	for (n = 0; n < 16; n++)
+		rdev->ovbench_timestamp[n] = skb->ovbench_timestamp[n];
+}
+
+static ssize_t
+raven_proc_read (struct file *fp, char __user *buf, size_t size, loff_t *off)
+{
+	char line[2048];
+
+#define ts(start, end) (end - start)
+
+	pr_info ("%s", __func__);
+	switch (ovbench_type) {
+	case OVTYPE_NOENCAP :
+		snprintf (line, sizelf (line),
+			  "Inner-TX: %llu\n",
+			  ts (ip_local_out_sk_in, raven_xmit_in));
+		if (copy_to_user (buf, line, strlen (buf))) {
+			pr_debug ("copy_to_user failed");
+			return -EFAULT;
+		}
+		break;
+
+	case OVTYPE_IPIP :
+		snprintf (line,
+			  "Inner-TX: %llu\n"
+			  "protocol-specific: %llu\n"
+			  "build-ourter-ip: %llu\n"
+			  "routing-lookup: %llu\n"
+			  "Outer-TX: %llu\n",
+			  ts (ip_local_out_sk_in, ipip_tunnel_xmit_in),
+			  ts (ipip_tunnel_xmit_in, ip_tunnel_xmit_in),
+			  ts (iptunnel_xmit_in, ip_local_out_sk_in_encaped),
+			  ts (ip_tunnel_xmit_in, iptunnel_xmit_in),
+			  ts (ip_local_out_sk_in_encaped, raven_xmit_in),
+			);
+		if (copy_to_user (buf, line, strlen (buf))) {
+			pr_debug ("copy_to_user failed");
+			return -EFAULT;
+		}
+		break;
+	case OVTYPE_GRE :
+		break;
+	case OVTYPE_GRETAP :
+		break;
+	case OVTYPE_VXLAN :
+		break;
+	case OVTYPE_NSH :
+		break;
+	}
+}
+
+static const struct file_operations raven_file_fops = {
+	.owner	= THIS_MODULE,
+	.read	= raven_proc_read,
+};
+#endif
+
+
+
 struct raven_net {
 	struct list_head	dev_list;	/* per netns device list */
 };
 
 static int raven_net_id;
-
 
 static inline struct hlist_head *
 raven_table_head (struct raven_dev *rdev, u64 key)
@@ -334,6 +409,10 @@ raven_xmit (struct sk_buff *skb, struct net_device *dev)
 	struct flowi4 fl4;
 	struct rtable *irt;
 
+#ifdef OVBENCH
+	raven_xmit_in = rdtsc ();
+#endif
+
 	if (drop_mode)
 		goto out;
 
@@ -396,6 +475,9 @@ out:
 	u64_stats_update_end (&tx_stats->syncp);
 
 	if (drop_mode) {
+#ifdef OVBENCH
+		copy_ovbench_params (skb, rdev);
+#endif
 		kfree_skb (skb);
 		return NETDEV_TX_OK;
 	}
@@ -610,6 +692,18 @@ raven_init_module (void)
 	rc = rtnl_link_register (&raven_link_ops);
 	if (rc < 0)
 		goto rtnl_failed;
+
+#ifdef OVBENCH
+#define PROC_NAME	"net/raven"
+	struct proc_dir_entry *ent;
+        ent = proc_create(PROC_NAME, S_IRUGO | S_IWUGO | S_IXUGO,
+			  NULL, &raven_file_fops);
+	if (ent == NULL) {
+		rtnl_link_unregister (&raven_link_ops);
+		unregister_pernet_subsys (&raven_net_ops);
+		return -ENOMEM;
+	}
+#endif
 
 	pr_info ("raven (%s) is loaded.", RAVEN_VERSION);
 	return 0;
