@@ -23,7 +23,7 @@
 #undef pr_fmt
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt "\n"
 
-#ifndef DEBUG
+#ifdef DEBUG
 #undef pr_debug
 #define pr_debug(fmt, ...) \
         printk(KERN_INFO "%s: " pr_fmt(fmt), __func__, ##__VA_ARGS__)
@@ -51,9 +51,6 @@ struct raven_table {
 	unsigned long		updated;	/* jiffies */
 
 	struct madcap_obj_entry	oe;
-
-	u64	id;	/* key */
-	__be32	dst;	/* ipv4 dst */
 };
 
 struct raven_dev {
@@ -147,7 +144,7 @@ raven_table_find (struct raven_dev *rdev, u64 id)
 	struct raven_table *rt;
 
 	hlist_for_each_entry_rcu (rt, head, hlist) {
-		if (id == rt->id)
+		if (id == rt->oe.id)
 			return rt;
 	}
 
@@ -304,12 +301,13 @@ static struct madcap_ops raven_madcap_ops = {
 static inline __u64
 extract_id_from_packet (struct sk_buff *skb, struct madcap_obj_config *oc)
 {
-	int n;
+	int i;
 	__u64 id;
 
 	id = *((__u64 *)(skb->data + oc->offset));
 
-	for (n = 0; n < (64 - oc->length); n++)
+	/* XXX: why id >>= (64 - oc->length) does not work? */
+	for (i = 0; i < (64 - oc->length); i++)
 		id >>= 1;
 
 	return id;
@@ -339,25 +337,28 @@ raven_xmit (struct sk_buff *skb, struct net_device *dev)
 	if (drop_mode)
 		goto out;
 
+	skb_scrub_packet(skb, false);
+
 	/* find destination address */
 	id = extract_id_from_packet (skb, &rdev->oc);
 	rt = raven_table_find (rdev, id);
+
 	if (!rt) {
 		/* find default destination, id 0 */
 		rt = raven_table_find (rdev, 0);
-		kfree_skb (skb);
 	}
-
 	if (!rt) {
-		netdev_dbg (dev, "no dst entry for id %llu", id);
+		pr_debug ("no dst entry for id %llu", id);
 		goto tx_err;
 	}
 
 	/* rouitng lookup */
-	fl4.daddr = rt->dst;
+	memset (&fl4, 0, sizeof (fl4));
+	fl4.daddr = rt->oe.dst;
 	fl4.saddr = rdev->oc.src;
 	irt = ip_route_output_key (dev_net (dev), &fl4);
 	if (IS_ERR (irt)) {
+		pr_debug ("%s, no route to %pI4", dev->name, &fl4.daddr);
 		kfree_skb (skb);
 		return -ENOMEM;
 	}

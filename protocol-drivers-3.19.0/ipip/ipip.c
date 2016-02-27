@@ -117,6 +117,9 @@
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
 
+/* madcapable version. */
+#include <madcap.h>
+
 static bool log_ecn_error = true;
 module_param(log_ecn_error, bool, 0644);
 MODULE_PARM_DESC(log_ecn_error, "Log packets received with corrupted ECN");
@@ -216,9 +219,16 @@ static netdev_tx_t ipip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ip_tunnel *tunnel = netdev_priv(dev);
 	const struct iphdr  *tiph = &tunnel->parms.iph;
+	struct net_device *mcdev;	/* madcap device */
 
 	if (unlikely(skb->protocol != htons(ETH_P_IP)))
 		goto tx_error;
+
+	mcdev = __dev_get_by_index (dev_net (dev), tunnel->parms.link);
+	if (mcdev && get_madcap_ops (mcdev)) {
+		madcap_queue_xmit (skb, mcdev);
+		return NETDEV_TX_OK;
+	}
 
 	skb = iptunnel_handle_offloads(skb, false, SKB_GSO_IPIP);
 	if (IS_ERR(skb))

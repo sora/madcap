@@ -93,8 +93,8 @@ parse_args (int argc, char ** argv, struct madcap_param *p)
 			NEXT_ARG ();
 			if (strcmp (*argv, "udp") == 0) {
 				p->proto = IPPROTO_UDP;
-			} else if (strcmp (*argv, "ip") == 0) {
-				p->proto = IPPROTO_IP;
+			} else if (strcmp (*argv, "ipip") == 0) {
+				p->proto = IPPROTO_IPIP;
 			} else if (strcmp (*argv, "gre") == 0) {
 				p->proto = IPPROTO_GRE;
 			} else 	if (get_u8 (&p->proto, *argv, 0)) {

@@ -602,7 +602,7 @@ static struct pernet_operations madcap_net_ops = {
 	.size	= sizeof (struct madcap_net),
 };
 
-struct madcap_ops *
+inline struct madcap_ops *
 get_madcap_ops (struct net_device *dev)
 {
 	/* XXX: if madcap_ops was a member of struct net_device,
