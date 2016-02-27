@@ -54,6 +54,9 @@
 #include <net/ip6_route.h>
 #endif
 
+/* madcapable version. */
+#include <madcap.h>
+
 /*
    Problems & solutions
    --------------------
@@ -230,6 +233,7 @@ static void __gre_xmit(struct sk_buff *skb, struct net_device *dev,
 {
 	struct ip_tunnel *tunnel = netdev_priv(dev);
 	struct tnl_ptk_info tpi;
+	struct net_device *mcdev;	/* madcap device */
 
 	tpi.flags = tunnel->parms.o_flags;
 	tpi.proto = proto;
@@ -240,6 +244,12 @@ static void __gre_xmit(struct sk_buff *skb, struct net_device *dev,
 
 	/* Push GRE header. */
 	gre_build_header(skb, &tpi, tunnel->tun_hlen);
+
+	mcdev = __dev_get_by_index (dev_net (dev), tunnel->parms.link);
+	if (mcdev && get_madcap_ops (mcdev)) {
+		madcap_queue_xmit (skb, mcdev);
+		return;
+	}
 
 	skb_set_inner_protocol(skb, tpi.proto);
 
