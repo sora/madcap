@@ -53,6 +53,14 @@
 /* madcapable version */
 #include <madcap.h>
 
+#ifdef OVBENCH
+#include <linux/ovbench.h>
+#endif
+
+static int madcap_enable __read_mostly = 0;
+module_param_named (madcap_enable, madcap_enable, int, 0444);
+MODULE_PARM_DESC (madcap_enable, "if 1, madcap offload is enabled.");
+
 #define VXLAN_VERSION	"0.1"
 
 #define PORT_HASH_BITS	8
@@ -1633,6 +1641,11 @@ int vxlan_xmit_skb(struct vxlan_sock *vs,
 	int err;
 	bool udp_sum = !vs->sock->sk->sk_no_check_tx;
 
+#ifdef OVBENCH
+	if (SKB_OVBENCH (skb))
+		skb->vxlan_xmit_skb_in = rdtsc ();
+#endif
+
 	skb = udp_tunnel_handle_offloads(skb, udp_sum);
 	if (IS_ERR(skb))
 		return PTR_ERR(skb);
@@ -1721,6 +1734,11 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 	__be16 df = 0;
 	__u8 tos, ttl;
 	int err;
+
+#ifdef OVBENCH
+	if (SKB_OVBENCH (skb))
+		skb->vxlan_xmit_one_in = rdtsc ();
+#endif
 
 	dst_port = rdst->remote_port ? rdst->remote_port : vxlan->dst_port;
 	vni = rdst->remote_vni;
@@ -1909,6 +1927,11 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct vxlan_rdst *rdst, *fdst = NULL;
 	struct vxlan_fdb *f;
 
+#ifdef OVBENCH
+	if (SKB_OVBENCH (skb))
+		skb->vxlan_xmit_in = rdtsc ();
+#endif
+
 	skb_reset_mac_header(skb);
 	eth = eth_hdr(skb);
 
@@ -1932,7 +1955,7 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	/* madcap shortcut !! */
-	if (vxlan->mcdev) {
+	if (madcap_enable && vxlan->mcdev) {
 		vxlan_xmit_madcap (skb, dev);
 		return NETDEV_TX_OK;
 	}

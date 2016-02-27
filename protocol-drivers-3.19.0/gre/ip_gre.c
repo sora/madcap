@@ -57,6 +57,14 @@
 /* madcapable version. */
 #include <madcap.h>
 
+#ifdef OVBENCH
+#include <linux/ovbench.h>
+#endif
+
+static int madcap_enable __read_mostly = 0;
+module_param_named (madcap_enable, madcap_enable, int, 0444);
+MODULE_PARM_DESC (madcap_enable, "if 1, madcap offload is enabled.");
+
 /*
    Problems & solutions
    --------------------
@@ -235,6 +243,12 @@ static void __gre_xmit(struct sk_buff *skb, struct net_device *dev,
 	struct tnl_ptk_info tpi;
 	struct net_device *mcdev;	/* madcap device */
 
+#ifdef OVBENCH
+	if (SKB_OVBENCH (skb)) {
+		skb->gre_xmit_in = rdtsc ();
+	}
+#endif
+
 	tpi.flags = tunnel->parms.o_flags;
 	tpi.proto = proto;
 	tpi.key = tunnel->parms.o_key;
@@ -245,10 +259,12 @@ static void __gre_xmit(struct sk_buff *skb, struct net_device *dev,
 	/* Push GRE header. */
 	gre_build_header(skb, &tpi, tunnel->tun_hlen);
 
-	mcdev = __dev_get_by_index (dev_net (dev), tunnel->parms.link);
-	if (mcdev && get_madcap_ops (mcdev)) {
-		madcap_queue_xmit (skb, mcdev);
-		return;
+	if (madcap_enable) {
+		mcdev = __dev_get_by_index (dev_net (dev), tunnel->parms.link);
+		if (mcdev && get_madcap_ops (mcdev)) {
+			madcap_queue_xmit (skb, mcdev);
+			return;
+		}
 	}
 
 	skb_set_inner_protocol(skb, tpi.proto);
@@ -261,6 +277,12 @@ static netdev_tx_t ipgre_xmit(struct sk_buff *skb,
 {
 	struct ip_tunnel *tunnel = netdev_priv(dev);
 	const struct iphdr *tnl_params;
+
+#ifdef OVBENCH
+	if (SKB_OVBENCH (skb)) {
+		skb->ipgre_xmit_in = rdtsc ();
+	}
+#endif
 
 	if (dev->header_ops) {
 		/* Need space for new headers */
@@ -301,6 +323,12 @@ static netdev_tx_t gre_tap_xmit(struct sk_buff *skb,
 				struct net_device *dev)
 {
 	struct ip_tunnel *tunnel = netdev_priv(dev);
+
+#ifdef OVBENCH
+	if (SKB_OVBENCH (skb)) {
+		skb->gre_tap_xmit_in = rdtsc ();
+	}
+#endif
 
 	skb = gre_handle_offloads(skb, !!(tunnel->parms.o_flags&TUNNEL_CSUM));
 	if (IS_ERR(skb))

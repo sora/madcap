@@ -25,6 +25,14 @@
 /* madcapable version */
 #include <madcap.h>
 
+#ifdef OVBENCH
+#include <linux/ovbench.h>
+#endif
+
+static int madcap_enable __read_mostly = 0;
+module_param_named (madcap_enable, madcap_enable, int, 0444);
+MODULE_PARM_DESC (madcap_enable, "if 1, madcap offload is enabled.");
+
 /*
  *
  * Network Service Header format.
@@ -381,6 +389,11 @@ static int nsh_xmit_vxlan_skb(struct socket *sock, struct net * net,
 	struct vxlanhdr *vxh;
 	bool udp_sum = !sock->sk->sk_no_check_tx;
 
+#ifdef OVBENCH
+	if (SKB_OVBENCH (skb))
+		skb->nsh_xmit_vxlan_skb_in = rdtsc ();
+#endif
+
 	skb = udp_tunnel_handle_offloads(skb, udp_sum);
 
 	err = skb_cow_head(skb, VXLAN_HEADROOM);
@@ -423,9 +436,18 @@ static int nsh_xmit_vxlan(struct sk_buff *skb, struct nsh_net *nnet,
 	struct flowi4 fl4;
 	struct rtable *rt;
 
-	if (nt->rdst->lowerdev && get_madcap_ops (nt->rdst->lowerdev)) {
-		return nsh_xmit_vxlan_madcap (skb, nt->rdst->lowerdev,
-					      nt->rdst->vni);
+#ifdef OVBENCH
+	if (SKB_OVBENCH (skb))
+		skb->nsh_xmit_vxlan_in = rdtsc ();
+#endif
+
+	if (madcap_enable) {
+		if (nt->rdst->lowerdev &&
+		    get_madcap_ops (nt->rdst->lowerdev)) {
+			return nsh_xmit_vxlan_madcap (skb,
+						      nt->rdst->lowerdev,
+						      nt->rdst->vni);
+		}
 	}
 
 	memset(&fl4, 0, sizeof(fl4));
@@ -492,12 +514,22 @@ static netdev_tx_t nsh_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct nsh_path_hdr *nph;
 	struct nsh_ctx_type1 *ctx;
 
+#ifdef OVBENCH
+	if (SKB_OVBENCH (skb))
+		skb->nsh_xmit_in = rdtsc ();
+#endif
+
 	nt = nsh_find_table(nnet, ndev->key);
 	if (!nt) {
 		if (net_ratelimit())
 			netdev_dbg(dev, "path is not assigned\n");
 		goto tx_err;
 	}
+
+#ifdef OVBENCH
+	if (SKB_OVBENCH (skb))
+		skb->nsh_xmit_lookup_end = rdtsc ();
+#endif
 
 	len = skb->len;
 

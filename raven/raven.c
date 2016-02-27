@@ -15,10 +15,6 @@
 #include <madcap.h>
 #include <raven.h>
 
-#ifdef OVBENCH
-#include <ovbench2.h>
-#endif
-
 #ifndef DEBUG
 #define DEBUG
 #endif
@@ -78,66 +74,154 @@ struct raven_dev {
 
 
 #ifdef OVBENCH
+#include <linux/ovbench.h>
+
 /* ovbench recent packet timestamp information. */
 static __u8	ovbench_type;
+static __u8	ovbench_encaped;
 static __u64	ovbench_timestamp[17];	/* 16 is raven_xmit */
+
+
+static int	proc_red = 0;	/* first read, 0. then 1. */
 
 static inline void
 copy_ovbench_params (struct sk_buff *skb, struct raven_dev *rdev)
 {
 	int n;
 
-	rdev->ovbench_type = skb->ovbench_type;
-	for (n = 0; n < 16; n++)
-		rdev->ovbench_timestamp[n] = skb->ovbench_timestamp[n];
+	if (SKB_OVBENCH (skb)) {
+		ovbench_type = skb->ovbench_type;
+		ovbench_encaped = skb->ovbench_encaped;
+		for (n = 0; n < 16; n++)
+			ovbench_timestamp[n] = skb->ovbench_timestamp[n];
+	}
 }
 
 static ssize_t
 raven_proc_read (struct file *fp, char __user *buf, size_t size, loff_t *off)
 {
-	char line[2048];
+	char line[256];
 
 #define ts(start, end) (end - start)
+#define p(param) pr_info ("##param##: %llu", param);
 
-	pr_info ("%s", __func__);
+	if (proc_red) {
+		proc_red = 0;
+		return 0;
+	} else
+		proc_red = 1;
+
 	switch (ovbench_type) {
 	case OVTYPE_NOENCAP :
-		snprintf (line, sizelf (line),
+		snprintf (line, sizeof (line),
 			  "Inner-TX: %llu\n",
-			  ts (ip_local_out_sk_in, raven_xmit_in));
-		if (copy_to_user (buf, line, strlen (buf))) {
-			pr_debug ("copy_to_user failed");
-			return -EFAULT;
-		}
+			  ts (ip_local_out_sk_in, raven_xmit_in)
+			);
 		break;
 
 	case OVTYPE_IPIP :
-		snprintf (line,
+		snprintf (line, sizeof (line),
+			  "encap: ipip\n"
 			  "Inner-TX: %llu\n"
 			  "protocol-specific: %llu\n"
-			  "build-ourter-ip: %llu\n"
 			  "routing-lookup: %llu\n"
+			  "build-ourter-ip: %llu\n"
 			  "Outer-TX: %llu\n",
 			  ts (ip_local_out_sk_in, ipip_tunnel_xmit_in),
 			  ts (ipip_tunnel_xmit_in, ip_tunnel_xmit_in),
-			  ts (iptunnel_xmit_in, ip_local_out_sk_in_encaped),
 			  ts (ip_tunnel_xmit_in, iptunnel_xmit_in),
-			  ts (ip_local_out_sk_in_encaped, raven_xmit_in),
+			  ts (iptunnel_xmit_in, ip_local_out_sk_in_encaped),
+			  ts (ip_local_out_sk_in_encaped, raven_xmit_in)
 			);
-		if (copy_to_user (buf, line, strlen (buf))) {
-			pr_debug ("copy_to_user failed");
-			return -EFAULT;
-		}
+
 		break;
+
 	case OVTYPE_GRE :
+		snprintf (line, sizeof (line),
+			  "encap: gre\n"
+			  "Inner-TX: %llu\n"
+			  "protocol-specific: %llu\n"
+			  "build-gre: %llu\n"
+			  "routing-lookup: %llu\n"
+			  "build-ourter-ip: %llu\n"
+			  "Outer-TX: %llu\n",
+			  ts (ip_local_out_sk_in, ipgre_xmit_in),
+			  ts (ipgre_xmit_in, gre_xmit_in),
+			  ts (gre_xmit_in, ip_tunnel_xmit_in),
+			  ts (ip_tunnel_xmit_in, iptunnel_xmit_in),
+			  ts (iptunnel_xmit_in, ip_local_out_sk_in_encaped),
+			  ts (ip_local_out_sk_in_encaped, raven_xmit_in)
+			);
 		break;
 	case OVTYPE_GRETAP :
+		snprintf (line, sizeof (line),
+			  "encap: gretap\n"
+			  "Inner-TX: %llu\n"
+			  "protocol-specific: %llu\n"
+			  "build-gre: %llu\n"
+			  "routing-lookup: %llu\n"
+			  "build-ourter-ip: %llu\n"
+			  "Outer-TX: %llu\n",
+			  ts (ip_local_out_sk_in, gre_tap_xmit_in),
+			  ts (gre_tap_xmit_in, gre_xmit_in),
+			  ts (gre_xmit_in, ip_tunnel_xmit_in),
+			  ts (ip_tunnel_xmit_in, iptunnel_xmit_in),
+			  ts (iptunnel_xmit_in, ip_local_out_sk_in_encaped),
+			  ts (ip_local_out_sk_in_encaped, raven_xmit_in)
+			);
 		break;
 	case OVTYPE_VXLAN :
+		snprintf (line, sizeof (line),
+			  "encap: vxlan\n"
+			  "Inner-TX: %llu\n"
+			  "protocol-specific:fdb: %llu\n"
+			  "routing-lookup: %llu\n"
+			  "build-vxlan: %llu\n"
+			  "build-udp: %llu\n"
+			  "build-ourter-ip: %llu\n"
+			  "Outer-TX: %llu\n",
+			  ts (ip_local_out_sk_in, vxlan_xmit_in),
+			  ts (vxlan_xmit_in, vxlan_xmit_one_in),
+			  ts (vxlan_xmit_one_in, vxlan_xmit_skb_in),
+			  ts (vxlan_xmit_skb_in, udp_tunnel_xmit_skb_in),
+			  ts (udp_tunnel_xmit_skb_in, iptunnel_xmit_in),
+			  ts (iptunnel_xmit_in, ip_local_out_sk_in_encaped),
+			  ts (ip_local_out_sk_in_encaped, raven_xmit_in)
+			);
 		break;
 	case OVTYPE_NSH :
+		snprintf (line, sizeof (line),
+			  "encap: nsh\n"
+			  "Inner-TX: %llu\n"
+			  "protocol-specific:fdb: %llu\n"
+			  "build-nsh: %llu\n"
+			  "routing-lookup: %llu\n"
+			  "build-vxlan: %llu\n"
+			  "build-udp: %llu\n"
+			  "build-ourter-ip: %llu\n"
+			  "Outer-TX: %llu\n",
+			  ts (ip_local_out_sk_in, nsh_xmit_in),
+			  ts (nsh_xmit_in, nsh_xmit_lookup_end),
+			  ts (nsh_xmit_lookup_end, nsh_xmit_vxlan_in),
+			  ts (nsh_xmit_vxlan_in, nsh_xmit_vxlan_skb_in),
+			  ts (nsh_xmit_vxlan_skb_in, udp_tunnel_xmit_skb_in),
+			  ts (udp_tunnel_xmit_skb_in, iptunnel_xmit_in),
+			  ts (iptunnel_xmit_in, ip_local_out_sk_in_encaped),
+			  ts (ip_local_out_sk_in_encaped, raven_xmit_in)
+			);
+		break;
+	default :
+		snprintf (line, sizeof (line),
+			  "unknown-ovbench_type %u\n", ovbench_type);
 		break;
 	}
+
+	if (copy_to_user (buf, line, strlen (line))) {
+		pr_debug ("copy_to_user failed");
+		return -EFAULT;
+	}
+
+	return strlen (line);
 }
 
 static const struct file_operations raven_file_fops = {
@@ -476,8 +560,12 @@ out:
 
 	if (drop_mode) {
 #ifdef OVBENCH
-		copy_ovbench_params (skb, rdev);
+		if (0 < skb->ovbench_type && skb->ovbench_type < 7) {
+			copy_ovbench_params (skb, rdev);
+			pr_info ("ovtype is %u", skb->ovbench_type);
+		}
 #endif
+
 		kfree_skb (skb);
 		return NETDEV_TX_OK;
 	}
@@ -682,6 +770,9 @@ static __init int
 raven_init_module (void)
 {
 	int rc;
+#ifdef OVBENCH
+	struct proc_dir_entry *ent;
+#endif
 
 	get_random_bytes (&raven_salt, sizeof (raven_salt));
 
@@ -694,8 +785,7 @@ raven_init_module (void)
 		goto rtnl_failed;
 
 #ifdef OVBENCH
-#define PROC_NAME	"net/raven"
-	struct proc_dir_entry *ent;
+#define PROC_NAME	"driver/raven"
         ent = proc_create(PROC_NAME, S_IRUGO | S_IWUGO | S_IXUGO,
 			  NULL, &raven_file_fops);
 	if (ent == NULL) {
@@ -706,6 +796,10 @@ raven_init_module (void)
 #endif
 
 	pr_info ("raven (%s) is loaded.", RAVEN_VERSION);
+
+	if (drop_mode)
+		pr_info ("drop mode on");
+
 	return 0;
 
 rtnl_failed:
@@ -721,6 +815,9 @@ raven_exit_module (void)
 	rtnl_link_unregister (&raven_link_ops);
 	unregister_pernet_subsys (&raven_net_ops);
 
+#ifdef OVBENCH
+	remove_proc_entry (PROC_NAME, NULL);
+#endif
 	pr_info ("raven (%s) is unloaded.", RAVEN_VERSION);
 }
 module_exit (raven_exit_module);

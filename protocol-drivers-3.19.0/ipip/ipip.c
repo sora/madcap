@@ -120,6 +120,14 @@
 /* madcapable version. */
 #include <madcap.h>
 
+static int madcap_enable __read_mostly = 0;
+module_param_named (madcap_enable, madcap_enable, int, 0444);
+MODULE_PARM_DESC (madcap_enable, "if 1, madcap offload is enabled.");
+
+#ifdef OVBENCH
+#include <linux/ovbench.h>
+#endif
+
 static bool log_ecn_error = true;
 module_param(log_ecn_error, bool, 0644);
 MODULE_PARM_DESC(log_ecn_error, "Log packets received with corrupted ECN");
@@ -221,13 +229,21 @@ static netdev_tx_t ipip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	const struct iphdr  *tiph = &tunnel->parms.iph;
 	struct net_device *mcdev;	/* madcap device */
 
+#ifdef OVBENCH
+	if (SKB_OVBENCH (skb)) {
+		skb->ipip_tunnel_xmit_in = rdtsc ();
+	}
+#endif
+
 	if (unlikely(skb->protocol != htons(ETH_P_IP)))
 		goto tx_error;
 
-	mcdev = __dev_get_by_index (dev_net (dev), tunnel->parms.link);
-	if (mcdev && get_madcap_ops (mcdev)) {
-		madcap_queue_xmit (skb, mcdev);
-		return NETDEV_TX_OK;
+	if (madcap_enable) {
+		mcdev = __dev_get_by_index (dev_net (dev), tunnel->parms.link);
+		if (mcdev && get_madcap_ops (mcdev)) {
+			madcap_queue_xmit (skb, mcdev);
+			return NETDEV_TX_OK;
+		}
 	}
 
 	skb = iptunnel_handle_offloads(skb, false, SKB_GSO_IPIP);
