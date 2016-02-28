@@ -84,7 +84,7 @@ struct raven_dev {
 /* ovbench recent packet timestamp information. */
 static __u8	ovbench_type;
 static __u8	ovbench_encaped;
-static __u64	ovbench_timestamp[OVBENCH_TIMESTAMPNUM]; /* raven_xmit */
+static __u64	ovbench_timestamp[OVBENCH_TIMESTAMPNUM];
 
 static int	proc_red = 0;	/* first read, 0. then 1. */
 
@@ -98,7 +98,7 @@ copy_ovbench_params (struct sk_buff *skb, struct raven_dev *rdev)
 	if (SKB_OVBENCH (skb)) {
 		ovbench_type = skb->ovbench_type;
 		ovbench_encaped = skb->ovbench_encaped;
-		for (n = 0; n < 16; n++)
+		for (n = 0; n < OVBENCH_TIMESTAMPNUM; n++)
 			ovbench_timestamp[n] = skb->ovbench_timestamp[n];
 	}
 }
@@ -119,7 +119,7 @@ raven_proc_read_madcap_disabled (struct file *fp, char __user *buf,
 	case OVTYPE_NOENCAP :
 		snprintf (line, sizeof (line),
 			  "encap:             noencap\n"
-			  "inner-tX:          %llu\n"
+			  "inner-tx:          %llu\n"
 			  "total-tx:          %llu\n",
 			  ts (ip_local_out_sk_in, raven_xmit_in),
 			  ts (ip_local_out_sk_in, raven_xmit_in)
@@ -657,7 +657,7 @@ raven_xmit (struct sk_buff *skb, struct net_device *dev)
 	struct rtable *irt;
 
 #ifdef OVBENCH
-	raven_xmit_in = rdtsc ();
+	skb->raven_xmit_in = rdtsc ();
 #endif
 
 	if (drop_mode)
