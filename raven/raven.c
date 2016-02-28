@@ -119,7 +119,9 @@ raven_proc_read_madcap_disabled (struct file *fp, char __user *buf,
 	case OVTYPE_NOENCAP :
 		snprintf (line, sizeof (line),
 			  "encap:             noencap\n"
-			  "inner-tX:          %llu\n",
+			  "inner-tX:          %llu\n"
+			  "total-tx:          %llu\n",
+			  ts (ip_local_out_sk_in, raven_xmit_in),
 			  ts (ip_local_out_sk_in, raven_xmit_in)
 			);
 		break;
@@ -131,12 +133,14 @@ raven_proc_read_madcap_disabled (struct file *fp, char __user *buf,
 			  "protocol-specific: %llu\n"
 			  "routing-lookup:    %llu\n"
 			  "build-outer-ip:    %llu\n"
-			  "outer-tx:          %llu\n",
+			  "outer-tx:          %llu\n"
+			  "total-tx:          %llu\n",
 			  ts (ip_local_out_sk_in, ipip_tunnel_xmit_in),
 			  ts (ipip_tunnel_xmit_in, ip_tunnel_xmit_in),
 			  ts (ip_tunnel_xmit_in, iptunnel_xmit_in),
 			  ts (iptunnel_xmit_in, ip_local_out_sk_in_encaped),
-			  ts (ip_local_out_sk_in_encaped, raven_xmit_in)
+			  ts (ip_local_out_sk_in_encaped, raven_xmit_in),
+			  ts (ip_local_out_sk_in, raven_xmit_in)
 			);
 
 		break;
@@ -149,13 +153,15 @@ raven_proc_read_madcap_disabled (struct file *fp, char __user *buf,
 			  "build-gre:         %llu\n"
 			  "routing-lookup:    %llu\n"
 			  "build-outer-ip:    %llu\n"
-			  "outer-tx:          %llu\n",
+			  "outer-tx:          %llu\n"
+			  "total-tx:          %llu\n",
 			  ts (ip_local_out_sk_in, ipgre_xmit_in),
 			  ts (ipgre_xmit_in, gre_xmit_in),
 			  ts (gre_xmit_in, ip_tunnel_xmit_in),
 			  ts (ip_tunnel_xmit_in, iptunnel_xmit_in),
 			  ts (iptunnel_xmit_in, ip_local_out_sk_in_encaped),
-			  ts (ip_local_out_sk_in_encaped, raven_xmit_in)
+			  ts (ip_local_out_sk_in_encaped, raven_xmit_in),
+			  ts (ip_local_out_sk_in, raven_xmit_in)
 			);
 		break;
 	case OVTYPE_GRETAP :
@@ -166,13 +172,15 @@ raven_proc_read_madcap_disabled (struct file *fp, char __user *buf,
 			  "build-gre:         %llu\n"
 			  "routing-lookup:    %llu\n"
 			  "build-outer-ip:    %llu\n"
-			  "outer-tx:          %llu\n",
+			  "outer-tx:          %llu\n"
+			  "total-tx:          %llu\n",
 			  ts (ip_local_out_sk_in, gre_tap_xmit_in),
 			  ts (gre_tap_xmit_in, gre_xmit_in),
 			  ts (gre_xmit_in, ip_tunnel_xmit_in),
 			  ts (ip_tunnel_xmit_in, iptunnel_xmit_in),
 			  ts (iptunnel_xmit_in, ip_local_out_sk_in_encaped),
-			  ts (ip_local_out_sk_in_encaped, raven_xmit_in)
+			  ts (ip_local_out_sk_in_encaped, raven_xmit_in),
+			  ts (ip_local_out_sk_in, raven_xmit_in)
 			);
 		break;
 	case OVTYPE_VXLAN :
@@ -184,14 +192,16 @@ raven_proc_read_madcap_disabled (struct file *fp, char __user *buf,
 			  "build-vxlan:           %llu\n"
 			  "build-udp:             %llu\n"
 			  "build-outer-ip:        %llu\n"
-			  "outer-tx:              %llu\n",
+			  "outer-tx:              %llu\n"
+			  "total-tx:              %llu\n",
 			  ts (ip_local_out_sk_in, vxlan_xmit_in),
 			  ts (vxlan_xmit_in, vxlan_xmit_one_in),
 			  ts (vxlan_xmit_one_in, vxlan_xmit_skb_in),
 			  ts (vxlan_xmit_skb_in, udp_tunnel_xmit_skb_in),
 			  ts (udp_tunnel_xmit_skb_in, iptunnel_xmit_in),
 			  ts (iptunnel_xmit_in, ip_local_out_sk_in_encaped),
-			  ts (ip_local_out_sk_in_encaped, raven_xmit_in)
+			  ts (ip_local_out_sk_in_encaped, raven_xmit_in),
+			  ts (ip_local_out_sk_in, raven_xmit_in)
 			);
 		break;
 	case OVTYPE_NSH :
@@ -204,7 +214,8 @@ raven_proc_read_madcap_disabled (struct file *fp, char __user *buf,
 			  "build-vxlan:           %llu\n"
 			  "build-udp:             %llu\n"
 			  "build-outer-ip:        %llu\n"
-			  "outer-tx:              %llu\n",
+			  "outer-tx:              %llu\n"
+			  "total-tx:              %llu\n",
 			  ts (ip_local_out_sk_in, nsh_xmit_in),
 			  ts (nsh_xmit_in, nsh_xmit_lookup_end),
 			  ts (nsh_xmit_lookup_end, nsh_xmit_vxlan_in),
@@ -212,7 +223,8 @@ raven_proc_read_madcap_disabled (struct file *fp, char __user *buf,
 			  ts (nsh_xmit_vxlan_skb_in, udp_tunnel_xmit_skb_in),
 			  ts (udp_tunnel_xmit_skb_in, iptunnel_xmit_in),
 			  ts (iptunnel_xmit_in, ip_local_out_sk_in_encaped),
-			  ts (ip_local_out_sk_in_encaped, raven_xmit_in)
+			  ts (ip_local_out_sk_in_encaped, raven_xmit_in),
+			  ts (ip_local_out_sk_in, raven_xmit_in)
 			);
 		break;
 	default :
@@ -254,7 +266,9 @@ raven_proc_read_madcap_enabled (struct file *fp, char __user *buf,
 	case OVTYPE_NOENCAP :
 		snprintf (line, sizeof (line),
 			  "encap:            noencap\n"
-			  "inner-tx:         %llu\n",
+			  "inner-tx:         %llu\n"
+			  "total-tx:         %llu\n",
+			  ts (ip_local_out_sk_in, raven_xmit_in),
 			  ts (ip_local_out_sk_in, raven_xmit_in)
 			);
 		break;
@@ -264,14 +278,13 @@ raven_proc_read_madcap_enabled (struct file *fp, char __user *buf,
 			  "encap:             ipip\n"
 			  "inner-tx:          %llu\n"
 			  "protocol-specific: %llu\n"
-			  "outer-tx:          %llu\n",
+			  "outer-tx:          %llu\n"
+			  "total-tx:          %llu\n",
 			  ts (ip_local_out_sk_in, ipip_tunnel_xmit_in),
 			  ts (ipip_tunnel_xmit_in, dev_queue_xmit_in),
-			  ts (dev_queue_xmit_in, raven_xmit_in)
+			  ts (dev_queue_xmit_in, raven_xmit_in),
+			  ts (ip_local_out_sk_in, raven_xmit_in)
 			);
-
-		pr_info ("dev_queue_xmit_in %llu", dev_queue_xmit_in);
-		pr_info ("raven_xmit_in %llu", raven_xmit_in);
 
 		break;
 
@@ -281,11 +294,13 @@ raven_proc_read_madcap_enabled (struct file *fp, char __user *buf,
 			  "inner-tx:          %llu\n"
 			  "protocol-specific: %llu\n"
 			  "build-gre:         %llu\n"
-			  "outer-tx:          %llu\n",
+			  "outer-tx:          %llu\n"
+			  "total-tx:          %llu\n",
 			  ts (ip_local_out_sk_in, ipgre_xmit_in),
 			  ts (ipgre_xmit_in, gre_xmit_in),
 			  ts (gre_xmit_in, dev_queue_xmit_in),
-			  ts (dev_queue_xmit_in, raven_xmit_in)
+			  ts (dev_queue_xmit_in, raven_xmit_in),
+			  ts (ip_local_out_sk_in, raven_xmit_in)
 			);
 		break;
 	case OVTYPE_GRETAP :
@@ -294,11 +309,13 @@ raven_proc_read_madcap_enabled (struct file *fp, char __user *buf,
 			  "inner-tx:          %llu\n"
 			  "protocol-specific: %llu\n"
 			  "build-gre:         %llu\n"
-			  "outer-tx:          %llu\n",
+			  "outer-tx:          %llu\n"
+			  "total-tx:          %llu\n",
 			  ts (ip_local_out_sk_in, gre_tap_xmit_in),
 			  ts (gre_tap_xmit_in, gre_xmit_in),
 			  ts (gre_xmit_in, dev_queue_xmit_in),
-			  ts (dev_queue_xmit_in, raven_xmit_in)
+			  ts (dev_queue_xmit_in, raven_xmit_in),
+			  ts (ip_local_out_sk_in, raven_xmit_in)
 			);
 		break;
 	case OVTYPE_VXLAN :
@@ -315,11 +332,13 @@ raven_proc_read_madcap_enabled (struct file *fp, char __user *buf,
 			  "inner-tx:              %llu\n"
 			  "protocol-specific:     %llu\n"
 			  "build-vxlan:           %llu\n"
-			  "outer-tx:              %llu\n",
+			  "outer-tx:              %llu\n"
+			  "total-tx:              %llu\n",
 			  ts (ip_local_out_sk_in, vxlan_xmit_in),
 			  ts (vxlan_xmit_in, vxlan_xmit_skb_in),
 			  ts (vxlan_xmit_skb_in, dev_queue_xmit_in),
-			  ts (dev_queue_xmit_in, raven_xmit_in)
+			  ts (dev_queue_xmit_in, raven_xmit_in),
+			  ts (ip_local_out_sk_in, raven_xmit_in)
 			);
 		break;
 	case OVTYPE_NSH :
@@ -335,12 +354,14 @@ raven_proc_read_madcap_enabled (struct file *fp, char __user *buf,
 			  "protocol-specific:fdb: %llu\n"
 			  "build-nsh:             %llu\n"
 			  "build-vxlan:           %llu\n"
-			  "outer-tx:              %llu\n",
+			  "outer-tx:              %llu\n"
+			  "total-tx:              %llu\n",
 			  ts (ip_local_out_sk_in, nsh_xmit_in),
 			  ts (nsh_xmit_in, nsh_xmit_lookup_end),
 			  ts (nsh_xmit_lookup_end, nsh_xmit_vxlan_in),
 			  ts (nsh_xmit_vxlan_in, dev_queue_xmit_in),
-			  ts (dev_queue_xmit_in, raven_xmit_in)
+			  ts (dev_queue_xmit_in, raven_xmit_in),
+			  ts (ip_local_out_sk_in, raven_xmit_in)
 			);
 		break;
 	default :
