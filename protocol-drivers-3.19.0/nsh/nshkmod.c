@@ -442,8 +442,10 @@ static int nsh_xmit_vxlan(struct sk_buff *skb, struct nsh_net *nnet,
 	struct rtable *rt;
 
 #ifdef OVBENCH
-	if (SKB_OVBENCH (skb))
+	if (SKB_OVBENCH (skb)) {
 		skb->nsh_xmit_vxlan_in = rdtsc ();
+		skb->ip_routing_start = skb->nsh_xmit_vxlan_in;
+	}
 #endif
 
 	memset(&fl4, 0, sizeof(fl4));
@@ -460,6 +462,18 @@ static int nsh_xmit_vxlan(struct sk_buff *skb, struct nsh_net *nnet,
 		ndev->dev->stats.tx_dropped++;
 		return -ENOENT;
 	}
+
+	if (rt->dst.dev == ndev->dev) {
+		netdev_dbg(ndev->dev, "circular route to %pI4\n", &fl4.daddr);
+		ndev->dev->stats.collisions++;
+		ndev->dev->stats.tx_errors++;
+	}
+
+#ifdef OVBENCH
+	if (SKB_OVBENCH (skb)) {
+		skb->ip_routing_end = rdtsc ();
+	}
+#endif
 
 	return nsh_xmit_vxlan_skb(nnet->sock, nnet->net, rt,
 				  skb, fl4.saddr, nt->rdst->remote_ip,

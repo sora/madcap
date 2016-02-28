@@ -1767,6 +1767,12 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 				     vxlan->port_max, true);
 
 	if (dst->sa.sa_family == AF_INET) {
+
+#ifdef OVBENCH
+		if (SKB_OVBENCH (skb))
+			skb->ip_routing_start = rdtsc ();
+#endif
+
 		memset(&fl4, 0, sizeof(fl4));
 		fl4.flowi4_oif = rdst->remote_ifindex;
 		fl4.flowi4_tos = RT_TOS(tos);
@@ -1787,6 +1793,12 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 			dev->stats.collisions++;
 			goto rt_tx_error;
 		}
+
+#ifdef OVBENCH
+		if (SKB_OVBENCH (skb))
+			skb->ip_routing_end = rdtsc ();
+#endif
+
 
 		/* Bypass encapsulation if the destination is local */
 		if (rt->rt_flags & RTCF_LOCAL &&
