@@ -132,7 +132,7 @@ netdevgen_build_packet (void)
 		skb->ovbench_type = 0;
 	else {
 		skb->ovbench_type = ovtype;
-		pr_info ("build packet %pI4->%pI4\n", &ip->saddr, &ip->daddr);
+		//pr_info ("build packet %pI4->%pI4\n", &ip->saddr, &ip->daddr);
 	}
 
 	return skb;

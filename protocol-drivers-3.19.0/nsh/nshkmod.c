@@ -416,6 +416,11 @@ static int nsh_xmit_vxlan_madcap (struct sk_buff *skb, struct net_device *dev,
 	int err;
 	struct vxlanhdr *vxh;
 
+#ifdef OVBENCH
+	if (SKB_OVBENCH (skb))
+		skb->nsh_xmit_vxlan_in = rdtsc ();
+#endif
+
 	err = skb_cow_head(skb, VXLAN_HEADROOM);
 	if (unlikely(err)) {
 		kfree_skb(skb);
@@ -440,15 +445,6 @@ static int nsh_xmit_vxlan(struct sk_buff *skb, struct nsh_net *nnet,
 	if (SKB_OVBENCH (skb))
 		skb->nsh_xmit_vxlan_in = rdtsc ();
 #endif
-
-	if (madcap_enable) {
-		if (nt->rdst->lowerdev &&
-		    get_madcap_ops (nt->rdst->lowerdev)) {
-			return nsh_xmit_vxlan_madcap (skb,
-						      nt->rdst->lowerdev,
-						      nt->rdst->vni);
-		}
-	}
 
 	memset(&fl4, 0, sizeof(fl4));
 	fl4.daddr = nt->rdst->remote_ip;
@@ -586,7 +582,14 @@ static netdev_tx_t nsh_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (nt->rdst) {
 		switch (nt->encap_type) {
 		case NSH_ENCAP_TYPE_VXLAN:
-			rc = nsh_xmit_vxlan(skb, nnet, ndev, nt, src_port);
+			if (madcap_enable && nt->rdst->lowerdev &&
+			    get_madcap_ops (nt->rdst->lowerdev)) {
+				rc = nsh_xmit_vxlan_madcap (skb,
+							    nt->rdst->lowerdev,
+							    nt->rdst->vni);
+			} else
+				rc = nsh_xmit_vxlan(skb, nnet, ndev,
+						    nt, src_port);
 			if (rc < 0)
 				goto tx_err;
 			break;

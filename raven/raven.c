@@ -41,6 +41,11 @@ static int drop_mode __read_mostly = 0;
 module_param_named (drop_mode, drop_mode, int, 0444);
 MODULE_PARM_DESC (drop_mode, "if 1, tx packet is dropped immediately.");
 
+static int madcap_mode __read_mostly = 0;
+module_param_named (madcap_mode, madcap_mode, int, 0444);
+MODULE_PARM_DESC (madcap_mode, "if 1, raven_proc_read returns TX path clock "
+		  "on madcap/raven offloaded version.");
+
 static u32 raven_salt __read_mostly;
 
 
@@ -81,8 +86,9 @@ static __u8	ovbench_type;
 static __u8	ovbench_encaped;
 static __u64	ovbench_timestamp[17];	/* 16 is raven_xmit */
 
-
 static int	proc_red = 0;	/* first read, 0. then 1. */
+
+#define ts(start, end) (end - start)
 
 static inline void
 copy_ovbench_params (struct sk_buff *skb, struct raven_dev *rdev)
@@ -98,12 +104,10 @@ copy_ovbench_params (struct sk_buff *skb, struct raven_dev *rdev)
 }
 
 static ssize_t
-raven_proc_read (struct file *fp, char __user *buf, size_t size, loff_t *off)
+raven_proc_read_madcap_disabled (struct file *fp, char __user *buf,
+				 size_t size, loff_t *off)
 {
-	char line[256];
-
-#define ts(start, end) (end - start)
-#define p(param) pr_info ("##param##: %llu", param);
+	char line[512];
 
 	if (proc_red) {
 		proc_red = 0;
@@ -114,19 +118,20 @@ raven_proc_read (struct file *fp, char __user *buf, size_t size, loff_t *off)
 	switch (ovbench_type) {
 	case OVTYPE_NOENCAP :
 		snprintf (line, sizeof (line),
-			  "Inner-TX: %llu\n",
+			  "encap:             noencap\n"
+			  "inner-tX:          %llu\n",
 			  ts (ip_local_out_sk_in, raven_xmit_in)
 			);
 		break;
 
 	case OVTYPE_IPIP :
 		snprintf (line, sizeof (line),
-			  "encap: ipip\n"
-			  "Inner-TX: %llu\n"
+			  "encap:             ipip\n"
+			  "inner-tx:          %llu\n"
 			  "protocol-specific: %llu\n"
-			  "routing-lookup: %llu\n"
-			  "build-ourter-ip: %llu\n"
-			  "Outer-TX: %llu\n",
+			  "routing-lookup:    %llu\n"
+			  "build-outer-ip:    %llu\n"
+			  "outer-tx:          %llu\n",
 			  ts (ip_local_out_sk_in, ipip_tunnel_xmit_in),
 			  ts (ipip_tunnel_xmit_in, ip_tunnel_xmit_in),
 			  ts (ip_tunnel_xmit_in, iptunnel_xmit_in),
@@ -138,13 +143,13 @@ raven_proc_read (struct file *fp, char __user *buf, size_t size, loff_t *off)
 
 	case OVTYPE_GRE :
 		snprintf (line, sizeof (line),
-			  "encap: gre\n"
-			  "Inner-TX: %llu\n"
+			  "encap:             gre\n"
+			  "inner-tx:          %llu\n"
 			  "protocol-specific: %llu\n"
-			  "build-gre: %llu\n"
-			  "routing-lookup: %llu\n"
-			  "build-ourter-ip: %llu\n"
-			  "Outer-TX: %llu\n",
+			  "build-gre:         %llu\n"
+			  "routing-lookup:    %llu\n"
+			  "build-outer-ip:    %llu\n"
+			  "outer-tx:          %llu\n",
 			  ts (ip_local_out_sk_in, ipgre_xmit_in),
 			  ts (ipgre_xmit_in, gre_xmit_in),
 			  ts (gre_xmit_in, ip_tunnel_xmit_in),
@@ -155,13 +160,13 @@ raven_proc_read (struct file *fp, char __user *buf, size_t size, loff_t *off)
 		break;
 	case OVTYPE_GRETAP :
 		snprintf (line, sizeof (line),
-			  "encap: gretap\n"
-			  "Inner-TX: %llu\n"
+			  "encap:             gretap\n"
+			  "inner-tx:          %llu\n"
 			  "protocol-specific: %llu\n"
-			  "build-gre: %llu\n"
-			  "routing-lookup: %llu\n"
-			  "build-ourter-ip: %llu\n"
-			  "Outer-TX: %llu\n",
+			  "build-gre:         %llu\n"
+			  "routing-lookup:    %llu\n"
+			  "build-outer-ip:    %llu\n"
+			  "outer-tx:          %llu\n",
 			  ts (ip_local_out_sk_in, gre_tap_xmit_in),
 			  ts (gre_tap_xmit_in, gre_xmit_in),
 			  ts (gre_xmit_in, ip_tunnel_xmit_in),
@@ -172,14 +177,14 @@ raven_proc_read (struct file *fp, char __user *buf, size_t size, loff_t *off)
 		break;
 	case OVTYPE_VXLAN :
 		snprintf (line, sizeof (line),
-			  "encap: vxlan\n"
-			  "Inner-TX: %llu\n"
+			  "encap:                 vxlan\n"
+			  "inner-tx:              %llu\n"
 			  "protocol-specific:fdb: %llu\n"
-			  "routing-lookup: %llu\n"
-			  "build-vxlan: %llu\n"
-			  "build-udp: %llu\n"
-			  "build-ourter-ip: %llu\n"
-			  "Outer-TX: %llu\n",
+			  "routing-lookup:        %llu\n"
+			  "build-vxlan:           %llu\n"
+			  "build-udp:             %llu\n"
+			  "build-outer-ip:        %llu\n"
+			  "outer-tx:              %llu\n",
 			  ts (ip_local_out_sk_in, vxlan_xmit_in),
 			  ts (vxlan_xmit_in, vxlan_xmit_one_in),
 			  ts (vxlan_xmit_one_in, vxlan_xmit_skb_in),
@@ -191,15 +196,15 @@ raven_proc_read (struct file *fp, char __user *buf, size_t size, loff_t *off)
 		break;
 	case OVTYPE_NSH :
 		snprintf (line, sizeof (line),
-			  "encap: nsh\n"
-			  "Inner-TX: %llu\n"
+			  "encap:                 nsh\n"
+			  "inner-tx:              %llu\n"
 			  "protocol-specific:fdb: %llu\n"
-			  "build-nsh: %llu\n"
-			  "routing-lookup: %llu\n"
-			  "build-vxlan: %llu\n"
-			  "build-udp: %llu\n"
-			  "build-ourter-ip: %llu\n"
-			  "Outer-TX: %llu\n",
+			  "build-nsh:             %llu\n"
+			  "routing-lookup:        %llu\n"
+			  "build-vxlan:           %llu\n"
+			  "build-udp:             %llu\n"
+			  "build-outer-ip:        %llu\n"
+			  "outer-tx:              %llu\n",
 			  ts (ip_local_out_sk_in, nsh_xmit_in),
 			  ts (nsh_xmit_in, nsh_xmit_lookup_end),
 			  ts (nsh_xmit_lookup_end, nsh_xmit_vxlan_in),
@@ -212,7 +217,7 @@ raven_proc_read (struct file *fp, char __user *buf, size_t size, loff_t *off)
 		break;
 	default :
 		snprintf (line, sizeof (line),
-			  "unknown-ovbench_type %u\n", ovbench_type);
+			  "unknown-ovbench-type %u\n", ovbench_type);
 		break;
 	}
 
@@ -222,6 +227,143 @@ raven_proc_read (struct file *fp, char __user *buf, size_t size, loff_t *off)
 	}
 
 	return strlen (line);
+}
+
+static ssize_t
+raven_proc_read_madcap_enabled (struct file *fp, char __user *buf,
+				size_t size, loff_t *off)
+{
+	char line[256];
+
+	if (proc_red) {
+		proc_red = 0;
+		return 0;
+	} else
+		proc_red = 1;
+
+	/*
+	 * dev_queue_xmit_in is overwrited in
+	 * - 1st: enqueueing packet to protocol pseudo device.
+	 * - 2nd: enqueueing packet to underlay raven device.
+	 * because skb->ovbench_encaped is set to 1 by iptunnel_xmit,
+	 * but in madcap mode, packet does not across iptunnel_xmit.
+	 * As a result, dev_queue_xmit_in has final timestamp when packet
+	 * is enqueued to raven device by madcap_queue_xmit().
+	 */
+	switch (ovbench_type) {
+	case OVTYPE_NOENCAP :
+		snprintf (line, sizeof (line),
+			  "encap:            noencap\n"
+			  "inner-tx:         %llu\n",
+			  ts (ip_local_out_sk_in, raven_xmit_in)
+			);
+		break;
+
+	case OVTYPE_IPIP :
+		snprintf (line, sizeof (line),
+			  "encap:             ipip\n"
+			  "inner-tx:          %llu\n"
+			  "protocol-specific: %llu\n"
+			  "outer-tx:          %llu\n",
+			  ts (ip_local_out_sk_in, ipip_tunnel_xmit_in),
+			  ts (ipip_tunnel_xmit_in, dev_queue_xmit_in),
+			  ts (dev_queue_xmit_in, raven_xmit_in)
+			);
+
+		pr_info ("dev_queue_xmit_in %llu", dev_queue_xmit_in);
+		pr_info ("raven_xmit_in %llu", raven_xmit_in);
+
+		break;
+
+	case OVTYPE_GRE :
+		snprintf (line, sizeof (line),
+			  "encap:             gre\n"
+			  "inner-tx:          %llu\n"
+			  "protocol-specific: %llu\n"
+			  "build-gre:         %llu\n"
+			  "outer-tx:          %llu\n",
+			  ts (ip_local_out_sk_in, ipgre_xmit_in),
+			  ts (ipgre_xmit_in, gre_xmit_in),
+			  ts (gre_xmit_in, dev_queue_xmit_in),
+			  ts (dev_queue_xmit_in, raven_xmit_in)
+			);
+		break;
+	case OVTYPE_GRETAP :
+		snprintf (line, sizeof (line),
+			  "encap:             gretap\n"
+			  "inner-tx:          %llu\n"
+			  "protocol-specific: %llu\n"
+			  "build-gre:         %llu\n"
+			  "outer-tx:          %llu\n",
+			  ts (ip_local_out_sk_in, gre_tap_xmit_in),
+			  ts (gre_tap_xmit_in, gre_xmit_in),
+			  ts (gre_xmit_in, dev_queue_xmit_in),
+			  ts (dev_queue_xmit_in, raven_xmit_in)
+			);
+		break;
+	case OVTYPE_VXLAN :
+		/* XXX: in madcap mode, xmit path is,
+		 * vxlan_xmit -> vxlan_xmit_madcap (build vxlan hdr) -> 
+		 * madcap_queue_xmit.
+		 * vxlan_xmit only does protocol dpened process.
+		 * skb_reset_mac_header, ARP reduce etc.
+		 *
+		 * vxlan_xmit_madcap_in is same field of vxlan_xmit_skb_in.
+		 */
+		snprintf (line, sizeof (line),
+			  "encap:                 vxlan\n"
+			  "inner-tx:              %llu\n"
+			  "protocol-specific:     %llu\n"
+			  "build-vxlan:           %llu\n"
+			  "outer-tx:              %llu\n",
+			  ts (ip_local_out_sk_in, vxlan_xmit_in),
+			  ts (vxlan_xmit_in, vxlan_xmit_skb_in),
+			  ts (vxlan_xmit_skb_in, dev_queue_xmit_in),
+			  ts (dev_queue_xmit_in, raven_xmit_in)
+			);
+		break;
+	case OVTYPE_NSH :
+		/* XXX: in madcap mode, xmit path is,
+		 * nsh_xmit (lookup, build nsh)
+		 * -> nsh_xmit_vxlan_madcap (build vxlan header).
+		 *
+		 * nsh_xmit_vxlan_madcap_in is same field of nsh_xmit_vxlan.
+		 */
+		snprintf (line, sizeof (line),
+			  "encap:                 nsh\n"
+			  "inner-tx:              %llu\n"
+			  "protocol-specific:fdb: %llu\n"
+			  "build-nsh:             %llu\n"
+			  "build-vxlan:           %llu\n"
+			  "outer-tx:              %llu\n",
+			  ts (ip_local_out_sk_in, nsh_xmit_in),
+			  ts (nsh_xmit_in, nsh_xmit_lookup_end),
+			  ts (nsh_xmit_lookup_end, nsh_xmit_vxlan_in),
+			  ts (nsh_xmit_vxlan_in, dev_queue_xmit_in),
+			  ts (dev_queue_xmit_in, raven_xmit_in)
+			);
+		break;
+	default :
+		snprintf (line, sizeof (line),
+			  "unknown-ovbench-type %u\n", ovbench_type);
+		break;
+	}
+
+	if (copy_to_user (buf, line, strlen (line))) {
+		pr_debug ("copy_to_user failed");
+		return -EFAULT;
+	}
+
+	return strlen (line);
+}
+
+static ssize_t
+raven_proc_read (struct file *fp, char __user *buf, size_t size, loff_t *off)
+{
+	if (madcap_mode)
+		return raven_proc_read_madcap_enabled (fp, buf, size, off);
+	else
+		return raven_proc_read_madcap_disabled (fp, buf, size, off);
 }
 
 static const struct file_operations raven_file_fops = {
@@ -562,7 +704,6 @@ out:
 #ifdef OVBENCH
 		if (0 < skb->ovbench_type && skb->ovbench_type < 7) {
 			copy_ovbench_params (skb, rdev);
-			pr_info ("ovtype is %u", skb->ovbench_type);
 		}
 #endif
 
@@ -799,6 +940,8 @@ raven_init_module (void)
 
 	if (drop_mode)
 		pr_info ("drop mode on");
+	if (madcap_mode)
+		pr_info ("madcap mode on");
 
 	return 0;
 

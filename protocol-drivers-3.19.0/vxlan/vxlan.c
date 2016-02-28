@@ -1894,6 +1894,11 @@ static int vxlan_xmit_madcap (struct sk_buff *skb, struct net_device *dev)
 	struct vxlanhdr *vxh;
 	struct vxlan_dev *vxlan = netdev_priv (dev);
 
+#ifdef OVBENCH
+	if (SKB_OVBENCH (skb))
+		skb->vxlan_xmit_skb_in = rdtsc ();
+#endif
+
 	err = skb_cow_head (skb, sizeof (*vxh));
 	if (unlikely (err)) {
 		kfree_skb (skb);

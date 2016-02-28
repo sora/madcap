@@ -5,8 +5,16 @@ s=sudo
 ip=../iproute2-4.4.0/ip/ip
 
 
+
 # 1 is madcap offload, 0 is normal tx.
-madcap=0
+
+madcap="$1"
+if [ "$madcap" = "" ]; then
+	echo \"$0 1\" madcap mode, \"$0 0\" is native TX path mode.
+	exit
+fi
+
+madcap_mode="madcap_mode=$madcap"
 
 echo Unload modules.
 $s rmmod ipip
@@ -23,8 +31,7 @@ $s rmmod udp_tunnel
 
 
 $s insmod ../madcap/madcap.ko
-$s insmod ../raven/raven.ko drop_mode=1
-
+$s insmod ../raven/raven.ko drop_mode=1 $madcap_mode
 
 echo set up normal raven device
 if [ $madcap -eq 0 ]; then
@@ -37,7 +44,6 @@ if [ $madcap -eq 0 ]; then
 else
 	madcap_enable="madcap_enable=1"
 fi
-
 
 echo set up ipip
 $s modprobe ip_tunnel
@@ -128,3 +134,11 @@ $s ifconfig nsh0 172.16.5.1/24
 $s arp -s 172.16.5.2 7a:a3:28:27:a3:ab
 
 $s $ni nsh add spi 10 si 5 encap vxlan remote 172.16.0.2 local 172.16.0.1 vni 0 $link
+
+
+echo setup noencap
+$s $ip link add name r4-noencap type raven
+$s $ip madcap add dev r4-noencap id 0 dst 10.10.10.10
+$s ifconfig r4-noencap up
+$s ifconfig r4-noencap 172.16.6.1/24
+$s arp -s 172.16.6.2 7a:a3:28:27:a3:ac
