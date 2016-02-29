@@ -57,7 +57,7 @@ if [ $madcap -ne 0 ]; then
 	$s ifconfig r0-ipip up
 	link="dev r0-ipip"
 else
-	link="dev raven0"
+	link=""
 fi
 
 $s ip tunnel add ipip1 mode ipip remote 172.16.0.2 local 172.16.0.1 $link
@@ -77,7 +77,7 @@ if [ $madcap -ne 0 ]; then
 	$s ifconfig r1-gre up
 	link="dev r1-gre"
 else
-	link="dev raven0"
+	link=""
 fi
 
 
@@ -104,7 +104,7 @@ if [ $madcap -ne 0 ]; then
 	$s ifconfig r2-vxlan up
 	link="dev r2-vxlan"
 else
-	link="dev raven0"
+	link=""
 fi
 
 $s $ip link add type vxlan local 172.16.0.1 remote 172.16.0.2 id 0 $link
@@ -125,7 +125,7 @@ if [ $madcap -ne 0 ]; then
 	$s ifconfig r3-nsh up
 	link="dev r3-nsh"
 else
-	link="dev raven0"
+	link=""
 fi
 
 $s $ni link add type nsh spi 10 si 5
