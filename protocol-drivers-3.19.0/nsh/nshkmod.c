@@ -536,11 +536,6 @@ static netdev_tx_t nsh_xmit(struct sk_buff *skb, struct net_device *dev)
 		goto tx_err;
 	}
 
-#ifdef OVBENCH
-	if (SKB_OVBENCH (skb))
-		skb->nsh_xmit_lookup_end = rdtsc ();
-#endif
-
 	len = skb->len;
 
 	switch (nt->mdtype) {
@@ -561,6 +556,11 @@ static netdev_tx_t nsh_xmit(struct sk_buff *skb, struct net_device *dev)
 		 * 0, 0, means default src port range. */
 		src_port = udp_flow_src_port(dev_net(dev), skb, 0, 0, true);
 	}
+
+#ifdef OVBENCH
+	if (SKB_OVBENCH (skb))
+		skb->nsh_xmit_lookup_end = rdtsc ();
+#endif
 
 	rc = skb_cow_head(skb, nhlen);
 	if (unlikely(rc)) {
