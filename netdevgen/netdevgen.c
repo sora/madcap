@@ -23,6 +23,17 @@ MODULE_AUTHOR ("upa@haeena.net");
 MODULE_DESCRIPTION ("netdevgen");
 MODULE_LICENSE ("GPL");
 
+#define kthread_run_on_cpu(threadfn, data, cpu, namefmt, ...)		\
+	({								\
+	        struct task_struct *__k					\
+			= kthread_create(threadfn, data,		\
+					 namefmt, ## __VA_ARGS__);	\
+		if (!IS_ERR(__k))					\
+			wake_up_process(__k);				\
+		kthread_bind(__k, cpu);					\
+		__k;							\
+	})
+
 static bool ndg_thread_running = false;
 static struct task_struct * ndg_tsk, * ndg_one_tsk;
 
@@ -61,7 +72,7 @@ static __be32 srcip;
 static __be32 dstip;
 static int ovtype;
 
-static bool measure_pps = false;
+static bool measure_pps = true;
 
 #define PROC_NAME "driver/netdevgen"
 
@@ -132,7 +143,7 @@ netdevgen_build_packet (void)
 		skb->ovbench_type = 0;
 	else {
 		skb->ovbench_type = ovtype;
-		//pr_info ("build packet %pI4->%pI4\n", &ip->saddr, &ip->daddr);
+		pr_info ("build packet %pI4->%pI4\n", &ip->saddr, &ip->daddr);
 	}
 
 	return skb;
@@ -187,7 +198,7 @@ netdevgen_thread (void * arg)
 	}
 
 err_out:
-	//kfree_skb (skb);
+	kfree_skb (skb);
 	ndg_thread_running = false;
 
 	pr_info ("netdevgen: thread finished\n");
@@ -199,12 +210,16 @@ err_out:
 static void
 start_netdevgen_thread (void)
 {
+	unsigned int cpu = 0x00000002;	/* Only running on CPU 1 */
+
 	if (ndg_tsk && ndg_thread_running) {
 		pr_info ("netdecgen: thread already running\n");
 		return;
 	}
 	
-	ndg_tsk = kthread_run (netdevgen_thread, NULL, "netdevgen");
+	ndg_tsk = kthread_run_on_cpu (netdevgen_thread, NULL, cpu,
+				      "netdevgen");
+
 	pr_info ("netdevgen: thread start\n");
 }
 
