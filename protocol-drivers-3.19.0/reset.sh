@@ -17,6 +17,9 @@ fi
 madcap_mode="madcap_mode=$madcap"
 
 echo Unload modules.
+
+$s rmmod ixgbe # ixgbe depends on vxlan.
+
 $s rmmod ipip
 $s rmmod ip_gre
 $s rmmod gre
@@ -38,6 +41,7 @@ if [ $madcap -eq 0 ]; then
 	$s $ip link add name raven0 type raven
 	$s ifconfig raven0 up
 	$s ifconfig raven0 172.16.0.1/24
+	$s ifconfig raven0 mtu 8192
 	sudo arp -s 172.16.0.2 7a:a3:28:27:a3:00
 
 	madcap_enable="madcap_enable=0"
@@ -55,9 +59,10 @@ if [ $madcap -ne 0 ]; then
 	$s $ip madcap set dev r0-ipip offset 0 length 0 proto ipip
 	$s $ip madcap add dev r0-ipip id 0 dst 10.10.10.10
 	$s ifconfig r0-ipip up
+	$s ifconfig r0-ipip mtu 8192
 	link="dev r0-ipip"
 else
-	link=""
+	link="dev raven0"
 fi
 
 $s ip tunnel add ipip1 mode ipip remote 172.16.0.2 local 172.16.0.1 $link
@@ -75,9 +80,10 @@ if [ $madcap -ne 0 ]; then
 	$s $ip madcap set dev r1-gre offset 0 length 0 proto gre
 	$s $ip madcap add dev r1-gre id 0 dst 10.10.10.10
 	$s ifconfig r1-gre up
+	$s ifconfig r1-gre mtu 8192
 	link="dev r1-gre"
 else
-	link=""
+	link="dev raven0"
 fi
 
 
@@ -102,9 +108,10 @@ if [ $madcap -ne 0 ]; then
 	$s $ip madcap set dev r2-vxlan udp enable dst-port 4789 src-port 4789 
 	$s $ip madcap add dev r2-vxlan id 0 dst 10.10.10.10
 	$s ifconfig r2-vxlan up
+	$s ifconfig r2-vxlan mtu 8192
 	link="dev r2-vxlan"
 else
-	link=""
+	link="dev raven0"
 fi
 
 $s $ip link add type vxlan local 172.16.0.1 remote 172.16.0.2 id 0 $link
@@ -123,9 +130,10 @@ if [ $madcap -ne 0 ]; then
 	$s $ip madcap set dev r3-nsh udp enable dst-port 4790 src-port 4790
 	$s $ip madcap add dev r3-nsh id 0 dst 10.10.10.10
 	$s ifconfig r3-nsh up
+	$s ifconfig r3-nsh mtu 8192
 	link="dev r3-nsh"
 else
-	link=""
+	link="dev raven0"
 fi
 
 $s $ni link add type nsh spi 10 si 5

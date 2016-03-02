@@ -259,6 +259,12 @@ static void __gre_xmit(struct sk_buff *skb, struct net_device *dev,
 	/* Push GRE header. */
 	gre_build_header(skb, &tpi, tunnel->tun_hlen);
 
+#ifdef OVBENCH
+	if (SKB_OVBENCH (skb)) {
+		skb->gre_encap_end = rdtsc ();
+	}
+#endif
+
 	if (madcap_enable) {
 		mcdev = __dev_get_by_index (dev_net (dev), tunnel->parms.link);
 		if (mcdev && get_madcap_ops (mcdev)) {

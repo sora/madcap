@@ -11,6 +11,7 @@ obj-y := madcap/ raven/ \
 	protocol-drivers-3.19.0/ipip/	\
 	protocol-drivers-3.19.0/vxlan/	\
 	protocol-drivers-3.19.0/nsh/	\
+	netdevgen/
 
 subdir-ccflags-y := -I$(src)/include $(flag_ovbench_$(OVBENCH))
 
