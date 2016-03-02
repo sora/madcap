@@ -16,8 +16,9 @@
 #include <net/route.h>
 #include <net/net_namespace.h>
 
+#ifdef OVBENCH
 #include <linux/ovbench.h>
-
+#endif
 
 MODULE_AUTHOR ("upa@haeena.net");
 MODULE_DESCRIPTION ("netdevgen");
@@ -37,17 +38,15 @@ MODULE_LICENSE ("GPL");
 static bool ndg_thread_running = false;
 static struct task_struct * ndg_tsk, * ndg_one_tsk;
 
-//static int pktlen = 46;	// + ether 14-byte = 60-byte
-//static int pktlen = 1486;	// + ether 14-byte = 1500-byte
-
-//static int pktlen = PKTLEN;	// 1508
 
 static int pktlen __read_mostly = 46;
 module_param_named (pktlen, pktlen, int, 0444);
 MODULE_PARM_DESC (pktlen, "packet length - eth header and preamble");
 
-//static __be32 srcip = 0x01010A0A; /* 10.10.1.1 */
-//static __be32 dstip = 0x02010A0A; /* 10.10.1.2 */
+
+static int measure_pps __read_mostly = 0;
+module_param_named (measure_pps, measure_pps, int, 0444);
+MODULE_PARM_DESC (measure_pps, "if 1, measure pps mode");
 
 
 static __be32 srcip_ipip	= 0x010110AC; /* 172.16.1.1 */
@@ -70,9 +69,10 @@ static __be32 dstip_noencap	= 0x020610AC; /* 172.16.6.2 */
 
 static __be32 srcip;
 static __be32 dstip;
-static int ovtype;
 
-static bool measure_pps = true;
+#ifdef OVBENCH
+static int ovtype;
+#endif
 
 #define PROC_NAME "driver/netdevgen"
 
@@ -96,14 +96,13 @@ netdevgen_build_packet (void)
 	}
 
 	/* alloc and build skb */
-	skb = alloc_skb_fclone (2048, GFP_KERNEL);
+	skb = alloc_skb_fclone ((pktlen + 14), GFP_KERNEL);
 	skb->protocol = htons (ETH_P_IP);
 	skb_put (skb, pktlen);
 	skb_set_network_header (skb, 0);
 	skb_set_transport_header (skb, sizeof (*ip));
 
 	memset(IPCB(skb), 0, sizeof(*IPCB(skb)));
-
 
 	ip = (struct iphdr *) skb_network_header (skb);
 	ip->ihl		= 5;
@@ -137,6 +136,7 @@ netdevgen_build_packet (void)
 	skb_dst_drop (skb);
 	skb_dst_set (skb, &rt->dst);
 
+#ifdef OVBENCH
 	skb->ovbench_encaped = 0;
 
 	if (measure_pps)
@@ -145,6 +145,7 @@ netdevgen_build_packet (void)
 		skb->ovbench_type = ovtype;
 		pr_info ("build packet %pI4->%pI4\n", &ip->saddr, &ip->daddr);
 	}
+#endif
 
 	return skb;
 }
@@ -160,7 +161,9 @@ netdevgen_xmit_one (void)
 		return;
 	}
 
+#ifdef OVBENCH
 	skb->first_xmit = rdtsc ();
+#endif
 
 	ip_local_out (skb);
 }
@@ -272,7 +275,9 @@ proc_write(struct file *fp, const char *buf, size_t size, loff_t *off)
 
 		srcip = srcip_vxlan;
 		dstip = dstip_vxlan;
+#ifdef OVBENCH
 		ovtype = OVTYPE_VXLAN;
+#endif
 		if (!measure_pps)
 			start_netdevgen_xmit_one_thread ();
 		else
@@ -282,7 +287,9 @@ proc_write(struct file *fp, const char *buf, size_t size, loff_t *off)
 
 		srcip = srcip_gretap;
 		dstip = dstip_gretap;
+#ifdef OVBENCH
 		ovtype = OVTYPE_GRETAP;
+#endif
 		if (!measure_pps)
 			start_netdevgen_xmit_one_thread ();
 		else
@@ -292,7 +299,9 @@ proc_write(struct file *fp, const char *buf, size_t size, loff_t *off)
 
 		srcip = srcip_gre;
 		dstip = dstip_gre;
+#ifdef OVBENCH
 		ovtype = OVTYPE_GRE;
+#endif
 		if (!measure_pps)
 			start_netdevgen_xmit_one_thread ();
 		else
@@ -302,7 +311,9 @@ proc_write(struct file *fp, const char *buf, size_t size, loff_t *off)
 
 		srcip = srcip_ipip;
 		dstip = dstip_ipip;
+#ifdef OVBENCH
 		ovtype = OVTYPE_IPIP;
+#endif
 		if (!measure_pps)
 			start_netdevgen_xmit_one_thread ();
 		else
@@ -312,7 +323,9 @@ proc_write(struct file *fp, const char *buf, size_t size, loff_t *off)
 
 		srcip = srcip_nsh;
 		dstip = dstip_nsh;
+#ifdef OVBENCH
 		ovtype = OVTYPE_NSH;
+#endif
 		if (!measure_pps)
 			start_netdevgen_xmit_one_thread ();
 		else
@@ -322,7 +335,9 @@ proc_write(struct file *fp, const char *buf, size_t size, loff_t *off)
 
 		srcip = srcip_noencap;
 		dstip = dstip_noencap;
+#ifdef OVBENCH
 		ovtype = OVTYPE_NOENCAP;
+#endif
 		if (!measure_pps)
 			start_netdevgen_xmit_one_thread ();
 		else

@@ -523,6 +523,7 @@ static netdev_tx_t nsh_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct nsh_base_hdr *nbh;
 	struct nsh_path_hdr *nph;
 	struct nsh_ctx_type1 *ctx;
+	bool madcap_on;
 
 #ifdef OVBENCH
 	if (SKB_OVBENCH (skb))
@@ -535,6 +536,9 @@ static netdev_tx_t nsh_xmit(struct sk_buff *skb, struct net_device *dev)
 			netdev_dbg(dev, "path is not assigned\n");
 		goto tx_err;
 	}
+
+	madcap_on = (madcap_enable && nt->rdst->lowerdev &&
+		     get_madcap_ops (nt->rdst->lowerdev));
 
 	len = skb->len;
 
@@ -550,7 +554,7 @@ static netdev_tx_t nsh_xmit(struct sk_buff *skb, struct net_device *dev)
 		goto tx_err;
 	}
 
-	if (nt->encap_type == NSH_ENCAP_TYPE_VXLAN) {
+	if (nt->encap_type == NSH_ENCAP_TYPE_VXLAN && !madcap_on) {
 		/* get udp src port for ether hash before encapsulation.
 		 * XXX: src_port_max and _min should be implemented.
 		 * 0, 0, means default src port range. */
@@ -561,7 +565,6 @@ static netdev_tx_t nsh_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (SKB_OVBENCH (skb))
 		skb->nsh_xmit_lookup_end = rdtsc ();
 #endif
-
 	rc = skb_cow_head(skb, nhlen);
 	if (unlikely(rc)) {
 		netdev_dbg(dev, "failed to skb_cow_head\n");
@@ -596,8 +599,7 @@ static netdev_tx_t nsh_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (nt->rdst) {
 		switch (nt->encap_type) {
 		case NSH_ENCAP_TYPE_VXLAN:
-			if (madcap_enable && nt->rdst->lowerdev &&
-			    get_madcap_ops (nt->rdst->lowerdev)) {
+			if (madcap_on) {
 				rc = nsh_xmit_vxlan_madcap (skb,
 							    nt->rdst->lowerdev,
 							    nt->rdst->vni);
