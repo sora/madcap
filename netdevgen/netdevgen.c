@@ -123,7 +123,7 @@ netdevgen_build_packet (void)
 	udp->dest	= 0;
 	udp->len	= htons (pktlen - sizeof (*ip));
 
-	__ip_select_ident(ip, skb_shinfo(skb)->gso_segs ?: 1);	
+	__ip_select_ident(net, ip, skb_shinfo(skb)->gso_segs ?: 1);
 
 	memset (&fl4, 0, sizeof (fl4));
 	fl4.saddr = srcip;
